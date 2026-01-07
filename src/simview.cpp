@@ -118,9 +118,11 @@ TimeLine::TimeLine(
       imgHeight(0.9 * logsHeight * height), events(events),
       execPath(get_executable_path()),
 
-      doneSprite(LoadTexture((execPath / "assets/done.png").c_str())),
-      preemptSprite(LoadTexture((execPath / "assets/preempt.png").c_str())),
-      missedSprite(LoadTexture((execPath / "assets/missed.png").c_str())) {}
+      doneSprite(LoadTexture((execPath / "assets/done.png").string().c_str())),
+      preemptSprite(
+          LoadTexture((execPath / "assets/preempt.png").string().c_str())),
+      missedSprite(
+          LoadTexture((execPath / "assets/missed.png").string().c_str())) {}
 
 void TimeLine::advanceState() {
   elements.clear();
