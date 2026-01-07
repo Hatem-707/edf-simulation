@@ -1,6 +1,7 @@
 #include "simview.hpp"
 #include "process.hpp"
 #include "scheduler.hpp"
+#include <filesystem>
 #include <iostream>
 #include <list>
 #include <memory>
@@ -9,6 +10,38 @@
 #include <raylib.h>
 #include <thread>
 #include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#elif defined(__linux__)
+#include <limits.h>
+#include <unistd.h>
+#endif
+
+std::filesystem::path get_executable_path() {
+#if defined(_WIN32)
+  wchar_t path[MAX_PATH];
+  GetModuleFileNameW(NULL, path, MAX_PATH);
+  return std::filesystem::path(path).parent_path();
+
+#elif defined(__linux__)
+  char result[PATH_MAX];
+  ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
+  return std::filesystem::path(std::string(result, (count > 0) ? count : 0))
+      .parent_path();
+
+#elif defined(__APPLE__)
+  char path[1024];
+  uint32_t size = sizeof(path);
+  if (_NSGetExecutablePath(path, &size) == 0)
+    return std::filesystem::path(path).parent_path();
+  return "";
+#else
+  return "";
+#endif
+}
 
 // --- Helper Functions ---
 std::string procTypeToString(ProcType p) {
@@ -85,14 +118,11 @@ TimeLine::TimeLine(
       divider3(y + logsHeight * height + 2 * timelineHeight),
       imgY(divider3 + timelineHeight + 0.05 * logsHeight * height),
       imgHeight(0.9 * logsHeight * height), events(events),
+      execPath(get_executable_path()),
 
-      doneSprite(LoadTexture(
-          "/home/hatem/Development/cpp/edf-simulation/src/assets/done.png")),
-      preemptSprite(LoadTexture(
-          "/home/hatem/Development/cpp/edf-simulation/src/assets/preempt.png")),
-      missedSprite(LoadTexture(
-          "/home/hatem/Development/cpp/edf-simulation/src/assets/missed.png")) {
-}
+      doneSprite(LoadTexture((execPath / "assets/done.png").c_str())),
+      preemptSprite(LoadTexture((execPath / "assets/preempt.png").c_str())),
+      missedSprite(LoadTexture((execPath / "assets/missed.png").c_str())) {}
 
 void TimeLine::advanceState() {
   elements.clear();
@@ -195,9 +225,11 @@ void TimeLine::drawLogs() {
       continue;
     }
     auto [posX, width] = getPosWidth(event.timeSince, event.timeSince - 5);
-    DrawRectangle(posX - width, divider1, width, 3 * timelineHeight, color);
-    DrawTextureEx(sprite, {posX - width, imgY}, 0, imgHeight / sprite.height,
-                  WHITE);
+    if (posX - 5 > this->x) {
+      DrawRectangle(posX - width, divider1, width, 3 * timelineHeight, color);
+      DrawTextureEx(sprite, {posX - width, imgY}, 0, imgHeight / sprite.height,
+                    WHITE);
+    }
   }
 }
 
@@ -222,6 +254,8 @@ SimView::SimView(float x, float y, float width, float height)
   sched.eventInterface = [this](Event e) { this->eventInterface(e); };
   schedulingThread = std::jthread([this]() { this->sched.loop(); });
 }
+
+SimView::~SimView() { sched.stop(); }
 
 void SimView::eventInterface(Event e) {
   {

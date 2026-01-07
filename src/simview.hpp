@@ -3,6 +3,7 @@
 #include "process.hpp"
 #include "scheduler.hpp"
 #include <array>
+#include <filesystem>
 #include <list>
 #include <memory>
 #include <optional>
@@ -10,6 +11,15 @@
 #include <thread>
 #include <tuple>
 #include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#elif defined(__linux__)
+#include <limits.h>
+#include <unistd.h>
+#endif
 
 class TraySection {
   float height;
@@ -62,6 +72,7 @@ class TimeLine {
   Rectangle recA;
   Rectangle recB;
   Rectangle recC;
+  std::filesystem::path execPath;
   Texture doneSprite;
   Color doneColor{180, 225, 181, 150};
   Texture preemptSprite;
@@ -105,6 +116,7 @@ class SimView {
 
 public:
   SimView(float x, float y, float width, float height);
+  ~SimView();
   void draw();
   void advanceState();
   void
