@@ -59,13 +59,11 @@ std::string procTypeToString(ProcType p) {
 
 TraySection::TraySection(
     float x, float y, float width, float height,
-    std::shared_ptr<int> activeProcIndex,
     std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
         procInterface)
     : height(height), width(width),
       cellWidth((width - 2 * (externalPad + innerPad)) / 3.f), x(x), y(y),
-      mainRec({x, y, width, height}), activeProcIndex(activeProcIndex),
-      procInterface(procInterface) {}
+      mainRec({x, y, width, height}), procInterface(procInterface) {}
 
 Rectangle TraySection::cellParameters(ProcType type) {
   Rectangle cell;
@@ -89,7 +87,7 @@ void TraySection::updateWait(ProcType proc, bool wait) {
   std::get<2>((*procInterface)[static_cast<int>(proc)]) = wait;
 }
 
-void TraySection::draw() {
+void TraySection::draw(int activeProc) {
   DrawRectangleRounded(mainRec, 0.25, 0, {30, 34, 42, 255});
   for (int i = 0; i < procInterface->size(); i++) {
     const auto &[type, color, waiting] = (*procInterface)[i];
@@ -98,9 +96,9 @@ void TraySection::draw() {
       DrawRectangleRounded(cell, 0.25, 0, color);
     }
   }
-  if (*activeProcIndex != -1) {
+  if (activeProc != -1) {
     DrawRectangleRounded(runingRec, 0.25, 0,
-                         std::get<1>((*procInterface)[*activeProcIndex]));
+                         std::get<1>((*procInterface)[activeProc]));
   } else {
     DrawRectangleRounded(runingRec, 0.25, 0, {30, 34, 42, 255});
   }
@@ -241,7 +239,6 @@ void TimeLine::draw() {
 
 SimView::SimView(float x, float y, float width, float height)
     : x(x), y(y), width(width), height(height),
-      activeProcIndex(std::make_shared<int>(-1)),
       events(std::make_shared<std::list<Event>>()),
       procInterface(
           std::make_shared<std::array<std::tuple<ProcType, Color, bool>, 3>>(
@@ -249,7 +246,7 @@ SimView::SimView(float x, float y, float width, float height)
                   {{ProcType::procA, {77, 121, 105, 255}, false},
                    {ProcType::procB, {167, 92, 92, 255}, false},
                    {ProcType::procC, {184, 145, 75, 255}, false}}})),
-      tray(44, 83, 320, 110, activeProcIndex, procInterface),
+      tray(44, 83, 320, 110, procInterface),
       timeline(44, 260, 713, 500, events, procInterface) {
   sched.eventInterface = [this](Event e) { this->eventInterface(e); };
   schedulingThread = std::jthread([this]() { this->sched.loop(); });
@@ -267,19 +264,19 @@ void SimView::eventInterface(Event e) {
     break;
   case EventType::complete: {
     std::lock_guard lk(APMTX);
-    *activeProcIndex = -1;
+    activeProc = -1;
   } break;
   case EventType::missed:
     tray.updateWait(e.proc, true);
     break;
   case EventType::preempt: {
     std::lock_guard lk(APMTX);
-    *activeProcIndex = -1;
+    activeProc = -1;
     tray.updateWait(e.proc, true);
   } break;
   case EventType::start: {
     std::lock_guard lk(APMTX);
-    *activeProcIndex = static_cast<int>(e.proc);
+    activeProc = static_cast<int>(e.proc);
     tray.updateWait(e.proc, false);
   } break;
   }
@@ -289,7 +286,7 @@ void SimView::draw() {
   ClearBackground({54, 61, 75, 255});
   {
     std::lock_guard lk(APMTX);
-    tray.draw();
+    tray.draw(activeProc);
   }
   timeline.draw();
 }

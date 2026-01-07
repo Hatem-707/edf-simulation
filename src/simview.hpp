@@ -30,7 +30,6 @@ class TraySection {
   float innerPad = 7;
   float externalPad = 3;
   float cellWidth;
-  std::shared_ptr<int> activeProcIndex;
   std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
       procInterface;
 
@@ -40,11 +39,10 @@ class TraySection {
   Rectangle cellParameters(ProcType type);
 
   TraySection(float x, float y, float width, float height,
-              std::shared_ptr<int> activeProcIndex,
               std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
                   procInterface);
 
-  void draw();
+  void draw(int activeProc);
   void updateWait(ProcType proc, bool wait);
 
   friend class SimView;
@@ -103,7 +101,7 @@ class SimView {
   float height;
   std::mutex eventMTX;
   std::mutex APMTX;
-  std::shared_ptr<int> activeProcIndex;
+  int activeProc;
   std::shared_ptr<std::list<Event>> events;
   std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
       procInterface;
