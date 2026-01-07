@@ -1,0 +1,215 @@
+#include "scheduler.hpp"
+#include <algorithm>
+#include <iostream>
+#include <ranges>
+
+Task::Task(long period, long duration,
+           std::chrono::steady_clock::time_point nextInterrupt, ProcType proc)
+    : duration(std::chrono::milliseconds(duration)),
+      period(std::chrono::milliseconds(period)), nextInterrupt(nextInterrupt),
+      proc(proc) {}
+
+void Task::run(std::chrono::steady_clock::duration dur) {
+  runTime += std::chrono::duration_cast<std::chrono::milliseconds>(dur);
+}
+
+Scheduler::Scheduler() : startTime(timer.now()) {}
+
+Scheduler::~Scheduler() { stop(); }
+
+void Scheduler::stop() {
+  running = false;
+  queCV.notify_all();
+}
+
+void Scheduler::addTask(std::tuple<long, long, long, ProcType> &taskParam) {
+  const auto &[period, duration, delay, type] = taskParam;
+  tasks.emplace_back(period, duration,
+                     timer.now() + std::chrono::milliseconds(delay), type);
+}
+
+void Scheduler::handleTaskQ() {
+  std::lock_guard lk(queMTX);
+  for (auto &param : incoming) {
+    addTask(param);
+  }
+  incoming.clear();
+}
+
+void Scheduler::initTasks(
+    std::vector<std::tuple<long, long, long, ProcType>> paramVector) {
+  {
+    std::lock_guard lk(queMTX);
+    // C++20 compatible insertion
+    incoming.insert(incoming.end(), paramVector.begin(), paramVector.end());
+  }
+  queCV.notify_one();
+}
+
+std::tuple<std::chrono::steady_clock::time_point, int, Interrupt>
+Scheduler::nextInterrupt() {
+  if (tasks.empty()) {
+    return {timer.now() + std::chrono::hours(24), -1, Interrupt::taskInit};
+  }
+
+  // C++20 views
+  auto enumerated = std::views::enumerate(tasks);
+
+  // Find the task with the earliest nextInterrupt
+  auto it = std::ranges::min_element(enumerated, [](auto &&a, auto &&b) {
+    return std::get<1>(a).nextInterrupt < std::get<1>(b).nextInterrupt;
+  });
+
+  const auto &[index, task] = *it;
+  return {task.nextInterrupt, (int)index, task.onWake};
+}
+
+void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInt) {
+  const auto &[index, interrupt] = firedInt;
+
+  // Safety check
+  if (index < 0 ||
+      index >= (int)tasks.size() && interrupt != Interrupt::taskAdded)
+    return;
+
+  switch (interrupt) {
+  case Interrupt::taskInit: {
+    Task &t = tasks[index];
+    t.status = TaskStatus::waiting;
+    t.refPoint = timer.now();
+    t.deadline = timer.now() + t.period;
+    if (eventInterface)
+      eventInterface({EventType::initilize, t.proc});
+    t.nextInterrupt = t.deadline;
+    t.onWake = Interrupt::taskRestart;
+  } break;
+  case Interrupt::taskRestart: {
+    Task &t = tasks[index];
+    t.refPoint = timer.now();
+    if (t.status != TaskStatus::completed) {
+      if (eventInterface)
+        eventInterface({EventType::missed, t.proc});
+    }
+    t.status = TaskStatus::waiting;
+    t.runTime = std::chrono::milliseconds::zero();
+    t.deadline = timer.now() + t.period;
+    t.nextInterrupt = t.deadline;
+    t.onWake = Interrupt::taskRestart;
+    break;
+  }
+  case Interrupt::taskComplete: {
+    Task &t = tasks[index];
+    t.run((timer.now() - latestCP));
+    t.status = TaskStatus::completed;
+    runTaskIndex.reset();
+    if (eventInterface)
+      eventInterface({EventType::complete, t.proc});
+    t.nextInterrupt = t.deadline;
+    t.onWake = Interrupt::taskRestart;
+    break;
+  }
+  case Interrupt::taskAdded:
+    handleTaskQ();
+    break;
+  }
+}
+
+void Scheduler::selectRunner() {
+  // Filter for waiting or running tasks
+  std::vector<std::pair<int, std::reference_wrapper<Task>>> filtered;
+  for (size_t i = 0; i < tasks.size(); ++i) {
+    if (tasks[i].status == TaskStatus::waiting ||
+        tasks[i].status == TaskStatus::running) {
+      filtered.push_back({(int)i, std::ref(tasks[i])});
+    }
+  }
+
+  if (filtered.empty()) {
+    runTaskIndex.reset();
+    return;
+  }
+
+  auto runnerIt =
+      std::ranges::min_element(filtered, [this](auto &&a, auto &&b) {
+        Task &tA = a.second.get();
+        Task &tB = b.second.get();
+        if (algo == SchedulingAlgo::EDF) {
+          return (tA.deadline) < (tB.deadline);
+        } else {
+          return tA.period < tB.period;
+        }
+      });
+
+  auto &[index, taskRef] = *runnerIt;
+  Task &task = taskRef.get();
+
+  if (!runTaskIndex || index != runTaskIndex.value()) {
+    if (runTaskIndex) {
+      Task &oldRunner = tasks[runTaskIndex.value()];
+      oldRunner.run((timer.now() - latestCP));
+      oldRunner.status = TaskStatus::waiting;
+      // preempt behavior: keep same deadline
+      if (eventInterface)
+        eventInterface({EventType::preempt, oldRunner.proc});
+    }
+
+    runTaskIndex = index;
+    task.status = TaskStatus::running;
+
+    auto remainingDuration = task.duration - task.runTime;
+
+    // Check if we can finish before deadline
+    if (task.deadline < remainingDuration + timer.now()) {
+      // Not enough time, interrupt at deadline (likely a miss)
+      task.nextInterrupt = task.deadline;
+      task.onWake = Interrupt::taskRestart;
+    } else {
+      // Schedule completion
+      task.nextInterrupt = timer.now() + remainingDuration;
+      task.onWake = Interrupt::taskComplete;
+    }
+  }
+}
+
+void Scheduler::loop() {
+  // Initial wait for tasks
+  {
+    std::unique_lock<std::mutex> lk(queMTX);
+    queCV.wait(lk,
+               [this]() { return !this->incoming.empty() || !this->running; });
+  }
+
+  if (!running)
+    return;
+
+  handleTaskQ();
+  latestCP = timer.now();
+
+  while (running) {
+    if (firedInterrupt) {
+      handleInterrupt(firedInterrupt.value());
+      firedInterrupt.reset();
+    }
+
+    selectRunner();
+
+    auto [wakeupTime, index, interrupt] = nextInterrupt();
+    firedInterrupt = {index, interrupt};
+
+    latestCP = timer.now();
+    if (wakeupTime > latestCP) {
+      std::unique_lock<std::mutex> lk(queMTX);
+      if (queCV.wait_until(lk, wakeupTime, [this]() {
+            return !this->incoming.empty() || !this->running;
+          })) {
+        if (!running)
+          break;
+        // Woke up due to incoming task
+        firedInterrupt = {0, Interrupt::taskAdded};
+      }
+    } else {
+      // We are behind schedule or event is now, process immediately in next
+      // loop
+    }
+  }
+}
