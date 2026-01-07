@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/home/hatem/Development/cpp/edf-simulation/build/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
