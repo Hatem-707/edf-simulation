@@ -7,6 +7,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 
+# Uncomment if raylib isn't installed and in the system path
 # include(FetchContent)
 # set(FETCHCONTENT_QUIET FALSE)
 # set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
