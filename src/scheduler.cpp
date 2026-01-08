@@ -6,10 +6,10 @@
 #include <ranges>
 
 Task::Task(long period, long duration,
-           std::chrono::steady_clock::time_point nextInterrupt, ProcType proc)
+           std::chrono::steady_clock::time_point nextInterrupt, int id)
     : duration(std::chrono::milliseconds(duration)),
       period(std::chrono::milliseconds(period)), nextInterrupt(nextInterrupt),
-      proc(proc) {}
+      id(id) {}
 
 void Task::run(std::chrono::steady_clock::duration duration) {
   runTime += std::chrono::duration_cast<std::chrono::milliseconds>(duration);
@@ -25,7 +25,7 @@ void Scheduler::stop() {
   queCV.notify_all();
 }
 
-void Scheduler::addTask(std::tuple<long, long, long, ProcType> &taskParam) {
+void Scheduler::addTask(std::tuple<long, long, long, int> &taskParam) {
   const auto &[period, duration, delay, type] = taskParam;
   tasks.emplace_back(period, duration,
                      timer.now() + std::chrono::milliseconds(delay), type);
@@ -42,10 +42,13 @@ void Scheduler::handleTaskQ() {
 }
 
 void Scheduler::initTasks(
-    std::vector<std::tuple<long, long, long, ProcType>> paramVector) {
+    std::vector<std::tuple<long, long, long>> paramVector) {
   {
     std::lock_guard lk(queMTX);
-    incoming.insert(incoming.end(), paramVector.begin(), paramVector.end());
+    for (int i = 0; i < paramVector.size(); i++) {
+      const auto &[period, duration, delay] = paramVector[i];
+      incoming.emplace_back(period, duration, delay, tasks.size() + i);
+    }
   }
   queCV.notify_one();
 }
@@ -78,7 +81,7 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
     t.deadline = timer.now() + t.period;
     // TODO: push an initialization event, if implemented
     if (eventInterface) {
-      eventInterface({EventType::initilize, t.proc});
+      eventInterface({EventType::initilize, t.id});
     }
     t.nextInterrupt = t.deadline;
     t.onWake = Interrupt::taskRestart;
@@ -95,7 +98,7 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
       }
       // TODO: push a task missed Event
       if (eventInterface) {
-        eventInterface({EventType::missed, t.proc});
+        eventInterface({EventType::missed, t.id});
       }
     }
     t.status = TaskStatus::waiting;
@@ -115,7 +118,7 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
     runTaskIndex.reset();
     // TODO: push a completion event
     if (eventInterface) {
-      eventInterface({EventType::complete, t.proc});
+      eventInterface({EventType::complete, t.id});
     }
     t.nextInterrupt = t.deadline;
     t.onWake = Interrupt::taskRestart;
@@ -155,7 +158,7 @@ void Scheduler::selectRunner() {
       oldRunner.onWake = Interrupt::taskRestart;
       // TODO: push a preempt event
       if (eventInterface) {
-        eventInterface({EventType::preempt, oldRunner.proc});
+        eventInterface({EventType::preempt, oldRunner.id});
       }
     }
     runTaskIndex = index;
@@ -165,7 +168,7 @@ void Scheduler::selectRunner() {
 
     if (eventInterface) {
       // TODO: push a start event
-      eventInterface({EventType::start, t.proc});
+      eventInterface({EventType::start, t.id});
     }
 
     if (t.deadline < remaningDuration + timer.now()) {

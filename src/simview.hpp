@@ -2,7 +2,6 @@
 
 #include "process.hpp"
 #include "scheduler.hpp"
-#include <array>
 #include <filesystem>
 #include <list>
 #include <memory>
@@ -10,6 +9,7 @@
 #include <raylib.h>
 #include <thread>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -26,47 +26,37 @@ class TraySection {
   float width;
   float x;
   float y;
-  float padding = 5;
   float innerPad = 7;
   float externalPad = 3;
   float cellWidth;
-  std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
-      procInterface;
+  std::shared_ptr<std::vector<std::pair<int, bool>>> procPool;
 
   Rectangle runingRec{606.5, 63, 150, 150};
   Rectangle mainRec;
 
-  Rectangle cellParameters(ProcType type);
+  Rectangle cellParameters(int id);
 
   TraySection(float x, float y, float width, float height,
-              std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
-                  procInterface);
+              std::shared_ptr<std::vector<std::pair<int, bool>>> procPool);
 
   void draw(int activeProc);
-  void updateWait(ProcType proc, bool wait);
+  void updateWait(int id, bool wait);
 
   friend class SimView;
 };
 
 class TimeLine {
-  typedef std::tuple<float, std::optional<float>, ProcType> TLElement;
+  typedef std::tuple<float, std::optional<float>, int> TLElement;
   float x;
   float y;
   float width;
   float height;
   long timeLineDuration = 200;
-  std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
-      procInterface;
+  std::shared_ptr<std::vector<std::pair<int, bool>>> procPool;
   std::shared_ptr<std::list<Event>> events;
   std::vector<TLElement> elements;
   Rectangle mainRec;
   const float logsHeight = 0.08;
-  float timelineHeight;
-  float divider1;
-  float divider2;
-  float divider3;
-  float imgY;
-  float imgHeight;
   Rectangle recA;
   Rectangle recB;
   Rectangle recC;
@@ -80,12 +70,14 @@ class TimeLine {
 
   TimeLine(float x, float y, float width, float height,
            std::shared_ptr<std::list<Event>> events,
-           std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
-               procInterface);
+           std::shared_ptr<std::vector<std::pair<int, bool>>> procPool);
 
   void advanceState();
 
-  std::tuple<float, float> getPosWidth(float start, float end);
+  std::pair<float, float> getPosWidth(float start, float end);
+  float getLaneHeight();
+  float getLaneY(int id);
+  std::pair<float, float> getImgCoor();
 
   void drawTimeLine();
   void drawLogs();
@@ -103,8 +95,7 @@ class SimView {
   std::mutex APMTX;
   int activeProc;
   std::shared_ptr<std::list<Event>> events;
-  std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
-      procInterface;
+  std::shared_ptr<std::vector<std::pair<int, bool>>> procPool;
 
   TraySection tray;
   TimeLine timeline;
@@ -117,6 +108,5 @@ public:
   ~SimView();
   void draw();
   void advanceState();
-  void
-  initTasks(std::vector<std::tuple<long, long, long, ProcType>> paramVector);
+  void initTasks(std::vector<std::tuple<long, long, long>> paramVector);
 };

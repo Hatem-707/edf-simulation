@@ -1,6 +1,7 @@
 #include "simview.hpp"
 #include "process.hpp"
 #include "scheduler.hpp"
+#include <array>
 #include <filesystem>
 #include <iostream>
 #include <list>
@@ -9,6 +10,7 @@
 #include <optional>
 #include <raylib.h>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -43,79 +45,68 @@ std::filesystem::path get_executable_path() {
 #endif
 }
 
-// --- Helper Functions ---
-std::string procTypeToString(ProcType p) {
-  switch (p) {
-  case ProcType::procA:
-    return "ProcA";
-  case ProcType::procB:
-    return "ProcB";
-  case ProcType::procC:
-    return "ProcC";
-  default:
-    return "Unknown";
-  }
-}
+std::array<Color, 5> procColors = {{{77, 121, 105, 255},
+                                    {122, 107, 99, 255},
+                                    {167, 92, 92, 255},
+                                    {176, 119, 84, 255},
+                                    {184, 145, 75, 255}}};
 
 TraySection::TraySection(
     float x, float y, float width, float height,
-    std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
-        procInterface)
+    std::shared_ptr<std::vector<std::pair<int, bool>>> procPool)
     : height(height), width(width),
       cellWidth((width - 2 * (externalPad + innerPad)) / 3.f), x(x), y(y),
-      mainRec({x, y, width, height}), procInterface(procInterface) {}
+      mainRec({x, y, width, height}), procPool(procPool) {}
 
-Rectangle TraySection::cellParameters(ProcType type) {
-  Rectangle cell;
-  switch (type) {
-  case ProcType::procA:
-    cell = {x + externalPad, padding + y, cellWidth, height - 2 * padding};
-    break;
-  case ProcType::procB:
-    cell = {cellWidth + x + innerPad + externalPad, padding + y, cellWidth,
-            height - 2 * padding};
-    break;
-  case ProcType::procC:
-    cell = {2.f * (cellWidth + innerPad) + x + externalPad, padding + y,
-            cellWidth, height - 2 * padding};
-    break;
+Rectangle TraySection::cellParameters(int id) {
+  int numProcs = procPool->size();
+  if (!numProcs) {
+    return {};
   }
+  if (id < 0 || id >= numProcs) {
+    return {};
+  }
+  this->cellWidth =
+      (this->width - (2 * externalPad + (numProcs - 1) * innerPad)) /
+      static_cast<float>(numProcs);
+  Rectangle cell;
+  cell = {x + externalPad + id * (cellWidth + innerPad), y + externalPad,
+          cellWidth, height - 2 * externalPad};
+
   return cell;
 }
 
-void TraySection::updateWait(ProcType proc, bool wait) {
-  std::get<2>((*procInterface)[static_cast<int>(proc)]) = wait;
+void TraySection::updateWait(int id, bool wait) {
+  for (auto &p : *procPool) {
+    if (p.first == id) {
+      p.second = wait;
+      return;
+    }
+  }
 }
 
 void TraySection::draw(int activeProc) {
   DrawRectangleRounded(mainRec, 0.25, 0, {30, 34, 42, 255});
-  for (int i = 0; i < procInterface->size(); i++) {
-    const auto &[type, color, waiting] = (*procInterface)[i];
+  for (int i = 0; i < procPool->size(); i++) {
+    const auto &[id, waiting] = (*procPool)[i];
+    Color color = procColors[id % 5];
     if (waiting) {
-      const auto cell = cellParameters(type);
+      const auto cell = cellParameters(i);
       DrawRectangleRounded(cell, 0.25, 0, color);
     }
   }
   if (activeProc != -1) {
-    DrawRectangleRounded(runingRec, 0.25, 0,
-                         std::get<1>((*procInterface)[activeProc]));
+    DrawRectangleRounded(runingRec, 0.25, 0, procColors[activeProc % 5]);
   } else {
     DrawRectangleRounded(runingRec, 0.25, 0, {30, 34, 42, 255});
   }
 }
 
-TimeLine::TimeLine(
-    float x, float y, float width, float height,
-    std::shared_ptr<std::list<Event>> events,
-    std::shared_ptr<std::array<std::tuple<ProcType, Color, bool>, 3>>
-        procInterface)
-    : x(x), y(y), width(width), height(height), procInterface(procInterface),
-      timelineHeight(height * (1 - 2. * logsHeight) / 3.),
-      mainRec({x, y, width, height}), divider1(y + logsHeight * height),
-      divider2(y + logsHeight * height + timelineHeight),
-      divider3(y + logsHeight * height + 2 * timelineHeight),
-      imgY(divider3 + timelineHeight + 0.05 * logsHeight * height),
-      imgHeight(0.9 * logsHeight * height), events(events),
+TimeLine::TimeLine(float x, float y, float width, float height,
+                   std::shared_ptr<std::list<Event>> events,
+                   std::shared_ptr<std::vector<std::pair<int, bool>>> procPool)
+    : x(x), y(y), width(width), height(height), procPool(procPool),
+      mainRec({x, y, width, height}), events(events),
       execPath(get_executable_path()),
 
       doneSprite(LoadTexture((execPath / "assets/done.png").string().c_str())),
@@ -126,30 +117,40 @@ TimeLine::TimeLine(
 
 void TimeLine::advanceState() {
   elements.clear();
-  std::array<std::optional<std::pair<TLElement, std::list<Event>::iterator>>, 3>
-      elementBuffer;
+  int elementNumber = this->procPool->size();
+  if (elementNumber <= 0) {
+    return;
+  }
+  std::vector<std::optional<std::pair<TLElement, std::list<Event>::iterator>>>
+      elementBuffer(elementNumber);
 
   for (auto it = events->begin(); it != events->end();) {
     it->timeSince = std::min(it->timeSince + 1, timeLineDuration);
-    int index = static_cast<int>(it->proc);
+    int index = it->id;
     if (it->type == EventType::start) {
       if (elementBuffer[index].has_value()) {
         std::cout << "New run while unterminated one exist for Process: "
-                  << procTypeToString(it->proc) << std::endl;
+                  << it->id << std::endl;
 
       } else {
         elementBuffer[index] = {
-            std::make_tuple(it->timeSince, std::nullopt, it->proc), it};
+            std::make_tuple(it->timeSince, std::nullopt, it->id), it};
       }
       it++;
-    } else if (it->type != EventType::missed &&
-               it->type != EventType::initilize) {
-      if (!elementBuffer[index].has_value()) {
+    } else if (it->type != EventType::initilize) {
+      if (!elementBuffer[index].has_value() && it->type != EventType::missed) {
         std::cout
             << "Terminating or interrupting an uninitialized run for process: "
-            << procTypeToString(it->proc) << std::endl;
+            << it->id << std::endl;
         it = events->erase(it);
       } else {
+        if (!elementBuffer[index].has_value()) {
+          if (it->timeSince >= timeLineDuration) {
+            it = events->erase(it);
+          } else {
+            it++;
+          }
+        }
         auto &[start, end, proc] = elementBuffer[index]->first;
         end = it->timeSince;
         if (start == timeLineDuration && it->timeSince >= timeLineDuration) {
@@ -180,31 +181,38 @@ void TimeLine::advanceState() {
   }
 }
 
-std::tuple<float, float> TimeLine::getPosWidth(float start, float end) {
+std::pair<float, float> TimeLine::getPosWidth(float start, float end) {
   float posX = (timeLineDuration - start) / timeLineDuration;
   posX = posX * this->width + this->x;
   float width = (start - end) * this->width / timeLineDuration;
   return {posX, width};
 }
 
+float TimeLine::getLaneHeight() {
+  if (!procPool->size()) {
+    return this->height * (1 - 2 * logsHeight);
+  }
+  return this->height * (1 - 2 * logsHeight) /
+         static_cast<float>(procPool->size());
+}
+
+float TimeLine::getLaneY(int id) {
+  return this->y + (logsHeight * this->height) + id * getLaneHeight();
+}
+
+std::pair<float, float> TimeLine::getImgCoor() {
+  float imgY = this->y + (logsHeight * this->height) +
+               (procPool->size() * getLaneHeight());
+  float imgHeight = (logsHeight * this->height);
+  return {imgY, imgHeight};
+}
+
 void TimeLine::drawTimeLine() {
   for (const TLElement &element : elements) {
-    const auto &[start, end, proc] = element;
+    const auto &[start, end, id] = element;
     auto [posX, width] = getPosWidth(start, end.value());
-    float posY;
-    Color color = std::get<1>((*procInterface)[static_cast<int>(proc)]);
-    switch (proc) {
-    case ProcType::procA:
-      posY = divider1;
-      break;
-    case ProcType::procB:
-      posY = divider2;
-      break;
-    case ProcType::procC:
-      posY = divider3;
-      break;
-    }
-    DrawRectangle(posX, posY, width, timelineHeight, color);
+    DrawRectangle(posX, getLaneY(id), width, getLaneHeight(),
+                  procColors[id % 5]);
   }
 }
 
@@ -226,7 +234,9 @@ void TimeLine::drawLogs() {
     }
     auto [posX, width] = getPosWidth(event.timeSince, event.timeSince - 5);
     if (posX - 5 > this->x) {
-      DrawRectangle(posX - width, divider1, width, 3 * timelineHeight, color);
+      const auto &[imgY, imgHeight] = getImgCoor();
+      float height = procPool->size() * getLaneHeight();
+      DrawRectangle(posX - width, getLaneY(0), width, height, color);
       DrawTextureEx(sprite, {posX - width, imgY}, 0, imgHeight / sprite.height,
                     WHITE);
     }
@@ -242,14 +252,9 @@ void TimeLine::draw() {
 SimView::SimView(float x, float y, float width, float height)
     : x(x), y(y), width(width), height(height),
       events(std::make_shared<std::list<Event>>()),
-      procInterface(
-          std::make_shared<std::array<std::tuple<ProcType, Color, bool>, 3>>(
-              std::array<std::tuple<ProcType, Color, bool>, 3>{
-                  {{ProcType::procA, {77, 121, 105, 255}, false},
-                   {ProcType::procB, {167, 92, 92, 255}, false},
-                   {ProcType::procC, {184, 145, 75, 255}, false}}})),
-      tray(44, 83, 320, 110, procInterface),
-      timeline(44, 260, 713, 500, events, procInterface) {
+      procPool(std::make_shared<std::vector<std::pair<int, bool>>>()),
+      tray(44, 83, 320, 110, procPool),
+      timeline(44, 260, 713, 500, events, procPool) {
   sched.eventInterface = [this](Event e) { this->eventInterface(e); };
   schedulingThread = std::jthread([this]() { this->sched.loop(); });
 }
@@ -269,17 +274,17 @@ void SimView::eventInterface(Event e) {
     activeProc = -1;
   } break;
   case EventType::missed:
-    tray.updateWait(e.proc, true);
+    tray.updateWait(e.id, true);
     break;
   case EventType::preempt: {
     std::lock_guard lk(APMTX);
     activeProc = -1;
-    tray.updateWait(e.proc, true);
+    tray.updateWait(e.id, true);
   } break;
   case EventType::start: {
     std::lock_guard lk(APMTX);
-    activeProc = static_cast<int>(e.proc);
-    tray.updateWait(e.proc, false);
+    activeProc = e.id;
+    tray.updateWait(e.id, false);
   } break;
   }
 }
@@ -300,10 +305,13 @@ void SimView::advanceState() {
   }
 }
 
-void SimView::initTasks(
-    std::vector<std::tuple<long, long, long, ProcType>> paramVector) {
+void SimView::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
+  int start = procPool->size();
+  for (int i = 0; i < paramVector.size(); ++i) {
+    procPool->emplace_back(start + i, false);
+  }
   std::jthread t(
-      [this](std::vector<std::tuple<long, long, long, ProcType>> paramVector) {
+      [this](std::vector<std::tuple<long, long, long>> paramVector) {
         this->sched.initTasks(paramVector);
       },
       paramVector);

@@ -9,10 +9,10 @@ int main() {
 
   SimView simView(0, 0, 1280 * viewRatio, height);
 
-  std::vector<std::tuple<long, long, long, ProcType>> paramVector = {
-      {2000, 500, 0, ProcType::procA},
-      {5000, 1000, 1000, ProcType::procB},
-      {4000, 1000, 1500, ProcType::procC}};
+  std::vector<std::tuple<long, long, long>> paramVector = {
+      {2000, 700, 0},    {5000, 1200, 1000}, {5000, 1300, 600},
+      {5000, 800, 1500}, {5000, 1100, 2000}, {5000, 1200, 1000},
+      {5000, 1300, 600}, {5000, 800, 1500}};
 
   simView.initTasks(paramVector);
   SetTargetFPS(60);

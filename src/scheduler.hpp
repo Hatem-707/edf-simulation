@@ -16,7 +16,7 @@ enum class TaskStatus { uninitialized = 0, waiting, running, completed };
 enum class Interrupt { taskInit = 0, taskComplete, taskRestart, taskAdded };
 
 class Task {
-  ProcType proc;
+  int id;
   TaskStatus status = TaskStatus::uninitialized;
   Interrupt onWake = Interrupt::taskInit;
   std::chrono::milliseconds period;
@@ -28,7 +28,7 @@ class Task {
 
 public:
   Task(long period, long duration,
-       std::chrono::steady_clock::time_point nextInterrupt, ProcType proc);
+       std::chrono::steady_clock::time_point nextInterrupt, int id);
   void run(std::chrono::steady_clock::duration duration);
   friend class Scheduler;
 };
@@ -37,7 +37,7 @@ class Scheduler {
   std::vector<Task> tasks;
   std::mutex queMTX;
   std::condition_variable queCV;
-  std::vector<std::tuple<long, long, long, ProcType>> incoming;
+  std::vector<std::tuple<long, long, long, int>> incoming;
   std::chrono::steady_clock timer;
   std::chrono::steady_clock::time_point startTime;
   std::chrono::steady_clock::time_point latestCP;
@@ -47,7 +47,7 @@ class Scheduler {
   SchedulingAlgo algo = SchedulingAlgo::EDF;
 
   void handleTaskQ();
-  void addTask(std::tuple<long, long, long, ProcType> &taskParam);
+  void addTask(std::tuple<long, long, long, int> &taskParam);
   std::tuple<std::chrono::steady_clock::time_point, int, Interrupt>
   nextInterrupt();
   void handleInterrupt(std::tuple<int, Interrupt> firedInterrupt);
@@ -58,8 +58,7 @@ public:
   std::atomic<bool> running{true};
   Scheduler(SchedulingAlgo algo = SchedulingAlgo::EDF);
   ~Scheduler();
-  void
-  initTasks(std::vector<std::tuple<long, long, long, ProcType>> paramVector);
+  void initTasks(std::vector<std::tuple<long, long, long>> paramVector);
   void stop();
   void loop();
 };
