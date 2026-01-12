@@ -72,14 +72,13 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
 
   switch (interrupt) {
   case Interrupt::taskInit: {
-    if (index < 0 || index >= (int)tasks.size()) {
+    if (index < 0 || index >= tasks.size()) {
       return;
     }
     Task &t = tasks[index];
     t.status = TaskStatus::waiting;
     t.refPoint = timer.now();
     t.deadline = timer.now() + t.period;
-    // TODO: push an initialization event, if implemented
     if (eventInterface) {
       eventInterface({EventType::initilize, t.id});
     }
@@ -96,7 +95,6 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
       if (t.status == TaskStatus::running) {
         runTaskIndex.reset();
       }
-      // TODO: push a task missed Event
       if (eventInterface) {
         eventInterface({EventType::missed, t.id});
       }
@@ -116,7 +114,6 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
     t.run((timer.now() - latestCP));
     t.status = TaskStatus::completed;
     runTaskIndex.reset();
-    // TODO: push a completion event
     if (eventInterface) {
       eventInterface({EventType::complete, t.id});
     }
@@ -142,8 +139,10 @@ void Scheduler::selectRunner() {
   }
 
   auto it = std::ranges::min_element(filtered, {}, [this](const Task &t) {
-    return (algo == SchedulingAlgo::EDF) ? (t.deadline - timer.now())
-                                         : t.period;
+    return (algo == SchedulingAlgo::EDF)
+               ? ((t.deadline > timer.now()) ? t.deadline - timer.now()
+                                             : std::chrono::milliseconds::max())
+               : t.period;
   });
 
   const Task &task = *it;
@@ -156,7 +155,6 @@ void Scheduler::selectRunner() {
       oldRunner.status = TaskStatus::waiting;
       oldRunner.nextInterrupt = oldRunner.deadline;
       oldRunner.onWake = Interrupt::taskRestart;
-      // TODO: push a preempt event
       if (eventInterface) {
         eventInterface({EventType::preempt, oldRunner.id});
       }
@@ -167,7 +165,6 @@ void Scheduler::selectRunner() {
     auto remaningDuration = t.duration - t.runTime;
 
     if (eventInterface) {
-      // TODO: push a start event
       eventInterface({EventType::start, t.id});
     }
 
@@ -205,7 +202,6 @@ void Scheduler::loop() {
         continue;
       }
       std::unique_lock<std::mutex> lk(queMTX);
-      ;
       if (queCV.wait_until(lk, wakeupTime, [this]() {
             return !this->incoming.empty() || !running;
           })) {
