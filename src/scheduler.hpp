@@ -6,6 +6,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <tuple>
@@ -13,7 +14,7 @@
 
 enum class TaskStatus { uninitialized = 0, waiting, running, completed };
 
-enum class Interrupt { taskInit = 0, taskComplete, taskRestart, taskAdded };
+enum class Interrupt { taskInit = 0, taskComplete, taskRestart, taskEdited };
 
 class Task {
   int id;
@@ -34,9 +35,10 @@ public:
 };
 
 class Scheduler {
-  std::vector<Task> tasks;
-  std::mutex queMTX;
-  std::condition_variable queCV;
+  std::map<int, Task> tasks;
+  std::mutex interfaceMTX;
+  std::condition_variable CV;
+  std::vector<int> tasksToRemove;
   std::vector<std::tuple<long, long, long, int>> incoming;
   std::chrono::steady_clock timer;
   std::chrono::steady_clock::time_point startTime;
@@ -46,8 +48,9 @@ class Scheduler {
 
   SchedulingAlgo algo = SchedulingAlgo::EDF;
 
-  void handleTaskQ();
   void addTask(std::tuple<long, long, long, int> &taskParam);
+  void deleteTask(int id);
+  void handleInterface();
   std::tuple<std::chrono::steady_clock::time_point, int, Interrupt>
   nextInterrupt();
   void handleInterrupt(std::tuple<int, Interrupt> firedInterrupt);
@@ -61,4 +64,5 @@ public:
   void initTasks(std::vector<std::tuple<long, long, long>> paramVector);
   void stop();
   void loop();
+  void removeTasks(std::vector<int> tasksId);
 };

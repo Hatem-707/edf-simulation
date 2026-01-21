@@ -2,7 +2,9 @@
 #include "process.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <iterator>
+#include <mutex>
 #include <ranges>
 
 Task::Task(long period, long duration,
@@ -22,74 +24,87 @@ Scheduler::~Scheduler() { this->stop(); }
 
 void Scheduler::stop() {
   running = false;
-  queCV.notify_all();
+  CV.notify_all();
 }
 
 void Scheduler::addTask(std::tuple<long, long, long, int> &taskParam) {
-  const auto &[period, duration, delay, type] = taskParam;
-  tasks.emplace_back(period, duration,
-                     timer.now() + std::chrono::milliseconds(delay), type);
+  const auto &[period, duration, delay, id] = taskParam;
+  tasks.insert(
+      {id,
+       {period, duration, timer.now() + std::chrono::milliseconds(delay), id}});
 }
 
-void Scheduler::handleTaskQ() {
+void Scheduler::deleteTask(int id) { tasks.erase(id); }
+
+void Scheduler::handleInterface() {
   {
-    std::lock_guard lk(queMTX);
-    for (auto param : incoming) {
-      addTask(param);
+    std::lock_guard lk(interfaceMTX);
+
+    if (!incoming.empty()) {
+      for (auto param : incoming) {
+        addTask(param);
+      }
+      incoming.clear();
     }
-    incoming.clear();
+
+    if (!tasksToRemove.empty()) {
+      for (int id : tasksToRemove) {
+        deleteTask(id);
+      }
+      tasksToRemove.clear();
+    }
   }
 }
 
 void Scheduler::initTasks(
     std::vector<std::tuple<long, long, long>> paramVector) {
   {
-    std::lock_guard lk(queMTX);
+    std::lock_guard lk(interfaceMTX);
     for (int i = 0; i < paramVector.size(); i++) {
       const auto &[period, duration, delay] = paramVector[i];
       incoming.emplace_back(period, duration, delay, tasks.size() + i);
     }
   }
-  queCV.notify_one();
+  CV.notify_one();
 }
 
 std::tuple<std::chrono::steady_clock::time_point, int, Interrupt>
 Scheduler::nextInterrupt() {
   if (tasks.empty()) {
     // Return a flag indicating nothing to schedule
-    return {timer.now() + std::chrono::hours(24), -1, Interrupt::taskInit};
+    return {timer.now() + std::chrono::milliseconds::max(), -1,
+            Interrupt::taskInit};
   }
 
   const auto it = std::ranges::min_element(
-      tasks, {}, [](const Task &t) { return t.nextInterrupt; });
-  const Task &task = *it;
-  int index = std::ranges::distance(tasks.begin(), it);
-  return {task.nextInterrupt, index, task.onWake};
+      tasks, {}, [](const auto t) { return t.second.nextInterrupt; });
+  const auto &[id, task] = *it;
+  return {task.nextInterrupt, id, task.onWake};
 }
 
 void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
-  const auto &[index, interrupt] = firedInterrupt;
+  const auto &[id, interrupt] = firedInterrupt;
 
   switch (interrupt) {
   case Interrupt::taskInit: {
-    if (index < 0 || index >= tasks.size()) {
+    if (!tasks.contains(id)) {
       return;
     }
-    Task &t = tasks[index];
+    Task &t = tasks.at(id);
     t.status = TaskStatus::waiting;
     t.refPoint = timer.now();
     t.deadline = timer.now() + t.period;
     if (eventInterface) {
-      eventInterface({EventType::initilize, t.id});
+      eventInterface({EventType::initialize, t.id});
     }
     t.nextInterrupt = t.deadline;
     t.onWake = Interrupt::taskRestart;
   } break;
   case Interrupt::taskRestart: {
-    if (index < 0 || index >= (int)tasks.size()) {
+    if (!tasks.contains(id)) {
       return;
     }
-    Task &t = tasks[index];
+    Task &t = tasks.at(id);
     t.refPoint = timer.now();
     if (t.status != TaskStatus::completed) {
       if (t.status == TaskStatus::running) {
@@ -107,10 +122,10 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
     break;
   }
   case Interrupt::taskComplete: {
-    if (index < 0 || index >= (int)tasks.size()) {
+    if (!tasks.contains(id)) {
       return;
     }
-    Task &t = tasks[index];
+    Task &t = tasks.at(id);
     t.run((timer.now() - latestCP));
     t.status = TaskStatus::completed;
     runTaskIndex.reset();
@@ -121,16 +136,16 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
     t.onWake = Interrupt::taskRestart;
     break;
   }
-  case Interrupt::taskAdded:
-    handleTaskQ();
+  case Interrupt::taskEdited:
+    handleInterface();
     break;
   }
 }
 
 void Scheduler::selectRunner() {
-  auto filtered = tasks | std::views::filter([](const Task &t) {
-                    return t.status == TaskStatus::waiting ||
-                           t.status == TaskStatus::running;
+  auto filtered = tasks | std::views::filter([](const auto &t) {
+                    return t.second.status == TaskStatus::waiting ||
+                           t.second.status == TaskStatus::running;
                   });
 
   if (std::ranges::empty(filtered)) {
@@ -138,19 +153,19 @@ void Scheduler::selectRunner() {
     return;
   }
 
-  auto it = std::ranges::min_element(filtered, {}, [this](const Task &t) {
+  auto it = std::ranges::min_element(filtered, {}, [this](const auto &t) {
     return (algo == SchedulingAlgo::EDF)
-               ? ((t.deadline > timer.now()) ? t.deadline - timer.now()
-                                             : std::chrono::milliseconds::max())
-               : t.period;
+               ? ((t.second.deadline > timer.now())
+                      ? t.second.deadline - timer.now()
+                      : std::chrono::milliseconds::max())
+               : t.second.period;
   });
 
-  const Task &task = *it;
-  int index = std::ranges::distance(tasks.begin(), it.base());
+  const auto &[id, task] = *it;
 
-  if (index != runTaskIndex) {
+  if (id != runTaskIndex) {
     if (runTaskIndex) {
-      Task &oldRunner = tasks[runTaskIndex.value()];
+      Task &oldRunner = tasks.at(runTaskIndex.value());
       oldRunner.run((timer.now() - latestCP));
       oldRunner.status = TaskStatus::waiting;
       oldRunner.nextInterrupt = oldRunner.deadline;
@@ -159,20 +174,20 @@ void Scheduler::selectRunner() {
         eventInterface({EventType::preempt, oldRunner.id});
       }
     }
-    runTaskIndex = index;
-    Task &t = tasks[index];
+    runTaskIndex = id;
+    Task &t = tasks.at(id);
     t.status = TaskStatus::running;
-    auto remaningDuration = t.duration - t.runTime;
+    auto remainingDuration = t.duration - t.runTime;
 
     if (eventInterface) {
       eventInterface({EventType::start, t.id});
     }
 
-    if (t.deadline < remaningDuration + timer.now()) {
+    if (t.deadline < remainingDuration + timer.now()) {
       t.nextInterrupt = t.deadline;
       t.onWake = Interrupt::taskRestart;
     } else {
-      t.nextInterrupt = remaningDuration + timer.now();
+      t.nextInterrupt = remainingDuration + timer.now();
       t.onWake = Interrupt::taskComplete;
     }
   }
@@ -180,13 +195,13 @@ void Scheduler::selectRunner() {
 
 void Scheduler::loop() {
   {
-    std::unique_lock<std::mutex> lk(queMTX);
-    queCV.wait(lk, [this]() { return !this->incoming.empty() || !running; });
+    std::unique_lock<std::mutex> lk(interfaceMTX);
+    CV.wait(lk, [this]() { return !this->incoming.empty() || !running; });
   }
   if (!running) {
     return;
   }
-  handleTaskQ();
+  handleInterface();
   latestCP = timer.now();
   while (running) {
     if (firedInterrupt) {
@@ -194,22 +209,31 @@ void Scheduler::loop() {
       firedInterrupt.reset();
     }
     selectRunner();
-    auto [wakeupTime, index, interrupt] = nextInterrupt();
-    firedInterrupt = {index, interrupt};
+    auto [wakeupTime, id, interrupt] = nextInterrupt();
+    firedInterrupt = {id, interrupt};
     {
       latestCP = timer.now();
       if (wakeupTime < latestCP) {
         continue;
       }
-      std::unique_lock<std::mutex> lk(queMTX);
-      if (queCV.wait_until(lk, wakeupTime, [this]() {
-            return !this->incoming.empty() || !running;
+      std::unique_lock<std::mutex> lk(interfaceMTX);
+      if (CV.wait_until(lk, wakeupTime, [this]() {
+            return !this->incoming.empty() || !running ||
+                   !this->tasksToRemove.empty();
           })) {
         if (!running)
           break;
-        firedInterrupt = {0, Interrupt::taskAdded};
+        firedInterrupt = {0, Interrupt::taskEdited};
       } else {
       }
     }
   }
+}
+
+void Scheduler::removeTasks(std::vector<int> tasksId) {
+  {
+    std::lock_guard lk(interfaceMTX);
+    tasksToRemove.insert(tasksToRemove.end(), tasksId.begin(), tasksId.end());
+  }
+  CV.notify_one();
 }

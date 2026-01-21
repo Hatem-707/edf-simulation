@@ -29,6 +29,7 @@ target_sources(main PRIVATE
     ${SOURCE_DIR}/main.cpp
     ${SOURCE_DIR}/simview.cpp
     ${SOURCE_DIR}/scheduler.cpp
+    ${SOURCE_DIR}/controls.cpp
 )
 target_link_libraries(main PRIVATE raylib)
 
