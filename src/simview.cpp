@@ -4,6 +4,7 @@
 #include <array>
 #include <filesystem>
 #include <iostream>
+#include <iterator>
 #include <list>
 #include <map>
 #include <memory>
@@ -55,7 +56,7 @@ std::array<Color, 5> procColors = {{{77, 121, 105, 255},
 
 TraySection::TraySection(
     float x, float y, float width, float height,
-    std::shared_ptr<std::vector<std::tuple<int, bool, Color>>> procPool)
+    std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool)
     : height(height), width(width),
       cellWidth((width - 2 * (externalPad + innerPad)) / 3.f), x(x), y(y),
       mainRec({x, y, width, height}), procPool(procPool) {}
@@ -79,20 +80,18 @@ Rectangle TraySection::cellParameters(int id) {
 }
 
 void TraySection::updateWait(int id, bool wait) {
-  for (auto &[pID, waiting, color] : *procPool) {
-
-    if (pID == id) {
-      waiting = wait;
-      return;
-    }
-  }
+  (*procPool)[id].first = wait;
 }
 
 void TraySection::draw(int activeProc) {
   DrawRectangleRounded(mainRec, 0.25, 0, {30, 34, 42, 255});
-  for (int i = 0; i < procPool->size(); i++) {
-    const auto &[id, waiting, color] = (*procPool)[i];
-    if (auto cell = cellParameters(i); waiting) {
+  for (const auto &[id, p] : *procPool) {
+    const auto &[waiting, color] = p;
+
+    const auto mapIT = procPool->find(id);
+    int index = std::distance(procPool->begin(), mapIT);
+
+    if (auto cell = cellParameters(index); waiting) {
       DrawRectangleRounded(cell, 0.25, 0, color);
     } else {
       cell.x += 2;
@@ -103,8 +102,8 @@ void TraySection::draw(int activeProc) {
       DrawRectangleRoundedLinesEx(cell, 0.25, 0, 2, color);
     }
   }
-  if (activeProc != -1 && activeProc >= 0) {
-    DrawRectangleRounded(runingRec, 0.25, 0, procColors[activeProc % 5]);
+  if (procPool->contains(activeProc)) {
+    DrawRectangleRounded(runingRec, 0.25, 0, procPool->at(activeProc).second);
   } else {
     DrawRectangleRounded(runingRec, 0.25, 0, {30, 34, 42, 255});
   }
@@ -113,7 +112,7 @@ void TraySection::draw(int activeProc) {
 TimeLine::TimeLine(
     float x, float y, float width, float height,
     std::shared_ptr<std::list<Event>> events,
-    std::shared_ptr<std::vector<std::tuple<int, bool, Color>>> procPool)
+    std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool)
     : x(x), y(y), width(width), height(height), procPool(procPool),
       mainRec({x, y, width, height}), events(events),
       execPath(get_executable_path()),
@@ -124,8 +123,7 @@ TimeLine::TimeLine(
       missedSprite(
           LoadTexture((execPath / "assets/missed.png").string().c_str())) {}
 
-void TimeLine::advanceState(const std::set<int> &validIDs,
-                            std::map<int, int> &id2Index) {
+void TimeLine::advanceState() {
   elements.clear();
   int elementNumber = this->procPool->size();
   if (elementNumber <= 0) {
@@ -135,14 +133,15 @@ void TimeLine::advanceState(const std::set<int> &validIDs,
       elementBuffer(elementNumber);
 
   for (auto it = events->begin(); it != events->end();) {
-    if (!validIDs.contains(it->id)) {
+    if (!procPool->contains(it->id)) {
       it = events->erase(it);
       continue;
     }
 
     it->timeSince = std::min(it->timeSince + 1, timeLineDuration);
 
-    int index = id2Index[it->id];
+    const auto mapIT = procPool->find(it->id);
+    int index = std::distance(procPool->begin(), mapIT);
 
     if (it->type == EventType::start) {
       if (elementBuffer[index].has_value()) {
@@ -231,13 +230,16 @@ std::pair<float, float> TimeLine::getImgCoor() {
   return {imgY, imgHeight};
 }
 
-void TimeLine::drawTimeLine(std::map<int, int> &id2Index) {
+void TimeLine::drawTimeLine() {
   for (const TLElement &element : elements) {
     auto [start, end, id] = element;
-    id = id2Index[id];
+
+    const auto mapIT = procPool->find(id);
+    int index = std::distance(procPool->begin(), mapIT);
+
     auto [posX, width] = getPosWidth(start, end.value());
-    DrawRectangle(posX, getLaneY(id), width, getLaneHeight(),
-                  std::get<2>((*procPool)[id]));
+    DrawRectangle(posX, getLaneY(index), width, getLaneHeight(),
+                  mapIT->second.second);
   }
 }
 
@@ -268,16 +270,16 @@ void TimeLine::drawLogs() {
   }
 }
 
-void TimeLine::draw(std::map<int, int> &id2Index) {
+void TimeLine::draw() {
   DrawRectangleRounded(mainRec, 0.10, 0, {30, 34, 42, 255});
-  drawTimeLine(id2Index);
+  drawTimeLine();
   drawLogs();
 }
 
 SimView::SimView(float x, float y, float width, float height)
     : x(x), y(y), width(width), height(height),
       events(std::make_shared<std::list<Event>>()),
-      procPool(std::make_shared<std::vector<std::tuple<int, bool, Color>>>()),
+      procPool(std::make_shared<std::map<int, std::pair<bool, Color>>>()),
       tray(44, 83, 320, 110, procPool),
       timeline(44, 260, 713, 500, events, procPool) {
   sched.eventInterface = [this](Event e) { this->eventInterface(e); };
@@ -320,27 +322,22 @@ void SimView::draw() {
     std::lock_guard lk(APMTX);
     tray.draw(activeProc);
   }
-  timeline.draw(id2Idnex);
+  timeline.draw();
 }
 
 void SimView::advanceState() {
   {
     std::lock_guard lk(eventMTX);
-    timeline.advanceState(validIDs, id2Idnex);
+    timeline.advanceState();
   }
 }
 
 void SimView::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
   for (int i = 0; i < paramVector.size(); ++i) {
-    procPool->emplace_back(procNum, false, procColors[procNum % 5]);
-    validIDs.insert(procNum);
+    procPool->insert({procNum, {false, procColors[procNum % 5]}});
     procNum++;
   }
-  id2Idnex.clear();
-  for (int i = 0; i < procPool->size(); i++) {
-    const auto &[id, wait, color] = (*procPool)[i];
-    id2Idnex[id] = i;
-  }
+
   std::jthread t(
       [this](std::vector<std::tuple<long, long, long>> paramVector) {
         this->sched.initTasks(paramVector);
@@ -350,16 +347,9 @@ void SimView::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
 
 void SimView::removeTasks(std::vector<int> tasksId) {
   for (int id : tasksId) {
-    std::erase_if(*procPool, [id](std::tuple<int, bool, Color> proc) {
-      return std::get<0>(proc) == id;
-    });
-    validIDs.erase(id);
+    procPool->erase(id);
   }
-  id2Idnex.clear();
-  for (int i = 0; i < procPool->size(); i++) {
-    const auto &[id, wait, color] = (*procPool)[i];
-    id2Idnex[id] = i;
-  }
+
   std::jthread t(
       [this](std::vector<int> tasksId) { this->sched.removeTasks(tasksId); },
       tasksId);

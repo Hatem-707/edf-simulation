@@ -8,7 +8,6 @@
 #include <memory>
 #include <optional>
 #include <raylib.h>
-#include <set>
 #include <thread>
 #include <tuple>
 #include <utility>
@@ -31,16 +30,15 @@ class TraySection {
   float innerPad = 7;
   float externalPad = 3;
   float cellWidth;
-  std::shared_ptr<std::vector<std::tuple<int, bool, Color>>> procPool;
+  std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool;
 
   Rectangle runingRec{606.5, 63, 150, 150};
   Rectangle mainRec;
 
   Rectangle cellParameters(int id);
 
-  TraySection(
-      float x, float y, float width, float height,
-      std::shared_ptr<std::vector<std::tuple<int, bool, Color>>> procPool);
+  TraySection(float x, float y, float width, float height,
+              std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool);
 
   void draw(int activeProc);
   void updateWait(int id, bool wait);
@@ -55,7 +53,7 @@ class TimeLine {
   float width;
   float height;
   long timeLineDuration = 200;
-  std::shared_ptr<std::vector<std::tuple<int, bool, Color>>> procPool;
+  std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool;
   std::shared_ptr<std::list<Event>> events;
   std::vector<TLElement> elements;
   Rectangle mainRec;
@@ -73,19 +71,18 @@ class TimeLine {
 
   TimeLine(float x, float y, float width, float height,
            std::shared_ptr<std::list<Event>> events,
-           std::shared_ptr<std::vector<std::tuple<int, bool, Color>>> procPool);
+           std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool);
 
-  void advanceState(const std::set<int> &validIDs,
-                    std::map<int, int> &id2Index);
+  void advanceState();
 
   std::pair<float, float> getPosWidth(float start, float end);
   float getLaneHeight();
   float getLaneY(int id);
   std::pair<float, float> getImgCoor();
 
-  void drawTimeLine(std::map<int, int> &id2Index);
+  void drawTimeLine();
   void drawLogs();
-  void draw(std::map<int, int> &id2Index);
+  void draw();
 
   friend class SimView;
 };
@@ -100,9 +97,7 @@ class SimView {
   std::mutex APMTX;
   int activeProc;
   std::shared_ptr<std::list<Event>> events;
-  std::shared_ptr<std::vector<std::tuple<int, bool, Color>>> procPool;
-  std::set<int> validIDs;
-  std::map<int, int> id2Idnex;
+  std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool;
 
   TraySection tray;
   TimeLine timeline;

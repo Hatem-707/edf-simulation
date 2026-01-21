@@ -11,10 +11,10 @@ int main() {
   SimView simView(0, 0, 1280 * viewRatio, height);
   Controls controls;
 
-  std::vector<std::tuple<long, long, long>> paramVector = {{5000, 500, 50},
+  std::vector<std::tuple<long, long, long>> paramVector = {{5000, 1000, 50},
                                                            {6000, 1000, 50},
                                                            {4000, 1000, 50},
-                                                           {4000, 500, 50},
+                                                           {4000, 1000, 50},
                                                            {4000, 1000, 2000}};
 
   simView.initTasks(paramVector);

@@ -53,6 +53,7 @@ void Scheduler::handleInterface() {
       }
       tasksToRemove.clear();
     }
+    runTaskIndex.reset();
   }
 }
 
