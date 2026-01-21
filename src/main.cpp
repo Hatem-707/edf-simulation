@@ -22,7 +22,12 @@ int main() {
   int frame{0};
   while (!WindowShouldClose()) {
     if (frame == 300) {
-      simView.removeTasks({0, 1});
+      simView.removeTasks({0, 3});
+    } else if (frame == 500) {
+      simView.initTasks({
+          {6000, 1000, 50},
+          {4000, 1000, 50},
+      });
     }
     simView.advanceState();
     BeginDrawing();

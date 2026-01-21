@@ -45,6 +45,7 @@ class Scheduler {
   std::chrono::steady_clock::time_point latestCP;
   std::optional<int> runTaskIndex;
   std::optional<std::tuple<int, Interrupt>> firedInterrupt;
+  int nextId = 0;
 
   SchedulingAlgo algo = SchedulingAlgo::EDF;
 

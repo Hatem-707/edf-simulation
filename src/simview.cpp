@@ -80,6 +80,9 @@ Rectangle TraySection::cellParameters(int id) {
 }
 
 void TraySection::updateWait(int id, bool wait) {
+  if (!procPool->contains(id)) {
+    return;
+  }
   (*procPool)[id].first = wait;
 }
 
@@ -329,6 +332,12 @@ void SimView::advanceState() {
   {
     std::lock_guard lk(eventMTX);
     timeline.advanceState();
+    if (procPool->size() == 6) {
+      for (const auto &[key, value] : *procPool) {
+        std::cout << "key: " << key << "color is:" << value.second.r << " "
+                  << value.second.g << " " << value.second.b << std::endl;
+      }
+    }
   }
 }
 

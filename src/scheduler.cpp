@@ -53,7 +53,10 @@ void Scheduler::handleInterface() {
       }
       tasksToRemove.clear();
     }
-    runTaskIndex.reset();
+
+    if (runTaskIndex && !tasks.contains(runTaskIndex.value())) {
+      runTaskIndex.reset();
+    }
   }
 }
 
@@ -63,7 +66,8 @@ void Scheduler::initTasks(
     std::lock_guard lk(interfaceMTX);
     for (int i = 0; i < paramVector.size(); i++) {
       const auto &[period, duration, delay] = paramVector[i];
-      incoming.emplace_back(period, duration, delay, tasks.size() + i);
+      incoming.emplace_back(period, duration, delay, nextId);
+      nextId++;
     }
   }
   CV.notify_one();
