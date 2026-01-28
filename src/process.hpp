@@ -1,6 +1,13 @@
 #pragma once
 
-enum class EventType { start = 0, complete, preempt, missed, initialize };
+enum class EventType {
+  start = 0,
+  complete,
+  preempt,
+  missed,
+  initialize,
+  resart
+};
 
 enum class SchedulingAlgo { EDF = 0, RMS };
 

@@ -1,5 +1,4 @@
-#include "controls.hpp"
-#include "simview.hpp"
+#include "app.hpp"
 #include <raylib.h>
 
 int main() {
@@ -8,31 +7,29 @@ int main() {
   InitWindow(width, height, "Scheduling simulation");
   float viewRatio = 0.6666;
 
-  SimView simView(0, 0, 1280 * viewRatio, height);
-  Controls controls;
+  App app(1280 * viewRatio, height);
 
-  std::vector<std::tuple<long, long, long>> paramVector = {{5000, 1000, 50},
-                                                           {6000, 1000, 50},
-                                                           {4000, 1000, 50},
-                                                           {4000, 1000, 50},
-                                                           {4000, 1000, 2000}};
+  std::vector<std::tuple<long, long, long>> paramVector = {{5000, 1000, 0},
+                                                           {6000, 1000, 0},
+                                                           {6000, 1000, 0},
+                                                           {6000, 1000, 0},
+                                                           {6000, 1000, 0}};
 
-  simView.initTasks(paramVector);
+  app.initTasks(paramVector);
   SetTargetFPS(60);
   int frame{0};
   while (!WindowShouldClose()) {
-    if (frame == 300) {
-      simView.removeTasks({0, 3});
-    } else if (frame == 500) {
-      simView.initTasks({
-          {6000, 1000, 50},
-          {4000, 1000, 50},
-      });
-    }
-    simView.advanceState();
+    // if (frame == 300) {
+    //   app.removeTasks({0, 3});
+    // } else if (frame == 500) {
+    //   app.initTasks({
+    //       {6000, 1500, 50},
+    //       {6000, 1000, 50},
+    //   });
+    // }
+    app.advanceView();
     BeginDrawing();
-    simView.draw();
-    controls.draw();
+    app.draw();
     EndDrawing();
     frame++;
   }

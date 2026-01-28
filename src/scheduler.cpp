@@ -17,8 +17,8 @@ void Task::run(std::chrono::steady_clock::duration duration) {
   runTime += std::chrono::duration_cast<std::chrono::milliseconds>(duration);
 }
 
-Scheduler::Scheduler(SchedulingAlgo algo)
-    : startTime(timer.now()), algo(algo) {};
+Scheduler::Scheduler(SchedulingAlgo algo, std::function<void(Event)> interface)
+    : startTime(timer.now()), algo(algo), eventInterface(interface) {}
 
 Scheduler::~Scheduler() { this->stop(); }
 
@@ -56,6 +56,10 @@ void Scheduler::handleInterface() {
 
     if (runTaskIndex && !tasks.contains(runTaskIndex.value())) {
       runTaskIndex.reset();
+    }
+    if (algoBuf) {
+      algo = *algoBuf;
+      algoBuf.reset();
     }
   }
 }
@@ -117,6 +121,10 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
       }
       if (eventInterface) {
         eventInterface({EventType::missed, t.id});
+      }
+    } else {
+      if (eventInterface) {
+        eventInterface({EventType::resart, t.id});
       }
     }
     t.status = TaskStatus::waiting;
@@ -239,6 +247,14 @@ void Scheduler::removeTasks(std::vector<int> tasksId) {
   {
     std::lock_guard lk(interfaceMTX);
     tasksToRemove.insert(tasksToRemove.end(), tasksId.begin(), tasksId.end());
+  }
+  CV.notify_one();
+}
+
+void Scheduler::assignAlgo(SchedulingAlgo newAlgo) {
+  {
+    std::lock_guard lk(interfaceMTX);
+    algoBuf = newAlgo;
   }
   CV.notify_one();
 }

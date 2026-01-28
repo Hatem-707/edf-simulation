@@ -48,10 +48,12 @@ class Scheduler {
   int nextId = 0;
 
   SchedulingAlgo algo = SchedulingAlgo::EDF;
+  std::optional<SchedulingAlgo> algoBuf;
 
   void addTask(std::tuple<long, long, long, int> &taskParam);
   void deleteTask(int id);
   void handleInterface();
+
   std::tuple<std::chrono::steady_clock::time_point, int, Interrupt>
   nextInterrupt();
   void handleInterrupt(std::tuple<int, Interrupt> firedInterrupt);
@@ -60,10 +62,16 @@ class Scheduler {
 public:
   std::function<void(Event)> eventInterface;
   std::atomic<bool> running{true};
-  Scheduler(SchedulingAlgo algo = SchedulingAlgo::EDF);
+  Scheduler(SchedulingAlgo algo = SchedulingAlgo::EDF,
+            std::function<void(Event)> interface = {});
+  Scheduler &operator=(const Scheduler &other) = delete;
+  Scheduler(const Scheduler &) = delete;
+  Scheduler(Scheduler &&other) = delete;
+  Scheduler &operator=(const Scheduler &&other) = delete;
   ~Scheduler();
   void initTasks(std::vector<std::tuple<long, long, long>> paramVector);
+  void removeTasks(std::vector<int> tasksId);
+  void assignAlgo(SchedulingAlgo newAlgo);
   void stop();
   void loop();
-  void removeTasks(std::vector<int> tasksId);
 };

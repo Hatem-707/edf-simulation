@@ -1,6 +1,5 @@
-#include "simview.hpp"
+#include "view.hpp"
 #include "process.hpp"
-#include "scheduler.hpp"
 #include <array>
 #include <filesystem>
 #include <iostream>
@@ -11,42 +10,9 @@
 #include <mutex>
 #include <optional>
 #include <raylib.h>
-#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
-
-#if defined(_WIN32)
-#include <windows.h>
-#elif defined(__APPLE__)
-#include <mach-o/dyld.h>
-#elif defined(__linux__)
-#include <limits.h>
-#include <unistd.h>
-#endif
-
-std::filesystem::path get_executable_path() {
-#if defined(_WIN32)
-  wchar_t path[MAX_PATH];
-  GetModuleFileNameW(NULL, path, MAX_PATH);
-  return std::filesystem::path(path).parent_path();
-
-#elif defined(__linux__)
-  char result[PATH_MAX];
-  ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
-  return std::filesystem::path(std::string(result, (count > 0) ? count : 0))
-      .parent_path();
-
-#elif defined(__APPLE__)
-  char path[1024];
-  uint32_t size = sizeof(path);
-  if (_NSGetExecutablePath(path, &size) == 0)
-    return std::filesystem::path(path).parent_path();
-  return "";
-#else
-  return "";
-#endif
-}
 
 std::array<Color, 5> procColors = {{{77, 121, 105, 255},
                                     {122, 107, 99, 255},
@@ -115,10 +81,10 @@ void TraySection::draw(int activeProc) {
 TimeLine::TimeLine(
     float x, float y, float width, float height,
     std::shared_ptr<std::list<Event>> events,
-    std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool)
+    std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool,
+    std::filesystem::path pExcutable)
     : x(x), y(y), width(width), height(height), procPool(procPool),
-      mainRec({x, y, width, height}), events(events),
-      execPath(get_executable_path()),
+      mainRec({x, y, width, height}), events(events), execPath(pExcutable),
 
       doneSprite(LoadTexture((execPath / "assets/done.png").string().c_str())),
       preemptSprite(
@@ -279,25 +245,26 @@ void TimeLine::draw() {
   drawLogs();
 }
 
-SimView::SimView(float x, float y, float width, float height)
-    : x(x), y(y), width(width), height(height),
+View::View(float width, float height, std::filesystem::path pExcutable)
+    : width(width), height(height),
       events(std::make_shared<std::list<Event>>()),
       procPool(std::make_shared<std::map<int, std::pair<bool, Color>>>()),
-      tray(44, 83, 320, 110, procPool),
-      timeline(44, 260, 713, 500, events, procPool) {
-  sched.eventInterface = [this](Event e) { this->eventInterface(e); };
-  schedulingThread = std::jthread([this]() { this->sched.loop(); });
-}
+      execPath(pExcutable), tray(44, 83, 320, 110, procPool),
+      timeline(44, 260, 713, 500, events, procPool, pExcutable) {}
 
-SimView::~SimView() { sched.stop(); }
-
-void SimView::eventInterface(Event e) {
+void View::eventInterface(Event e) {
   {
     std::lock_guard lk(eventMTX);
-    events->emplace_back(e);
+    if (e.type != EventType::initialize && e.type != EventType::resart) {
+      events->emplace_back(e);
+    }
   }
   switch (e.type) {
   case EventType::initialize:
+    tray.updateWait(e.id, true);
+    break;
+  case EventType::resart:
+    tray.updateWait(e.id, true);
     break;
   case EventType::complete: {
     std::lock_guard lk(APMTX);
@@ -319,7 +286,7 @@ void SimView::eventInterface(Event e) {
   }
 }
 
-void SimView::draw() {
+void View::draw() {
   ClearBackground({54, 61, 75, 255});
   {
     std::lock_guard lk(APMTX);
@@ -328,7 +295,7 @@ void SimView::draw() {
   timeline.draw();
 }
 
-void SimView::advanceState() {
+void View::advanceState() {
   {
     std::lock_guard lk(eventMTX);
     timeline.advanceState();
@@ -341,25 +308,15 @@ void SimView::advanceState() {
   }
 }
 
-void SimView::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
+void View::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
   for (int i = 0; i < paramVector.size(); ++i) {
     procPool->insert({procNum, {false, procColors[procNum % 5]}});
     procNum++;
   }
-
-  std::jthread t(
-      [this](std::vector<std::tuple<long, long, long>> paramVector) {
-        this->sched.initTasks(paramVector);
-      },
-      paramVector);
 }
 
-void SimView::removeTasks(std::vector<int> tasksId) {
+void View::removeTasks(std::vector<int> tasksId) {
   for (int id : tasksId) {
     procPool->erase(id);
   }
-
-  std::jthread t(
-      [this](std::vector<int> tasksId) { this->sched.removeTasks(tasksId); },
-      tasksId);
 }

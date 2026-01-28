@@ -1,26 +1,15 @@
 #pragma once
 
 #include "process.hpp"
-#include "scheduler.hpp"
 #include <filesystem>
 #include <list>
 #include <map>
 #include <memory>
 #include <optional>
 #include <raylib.h>
-#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
-
-#if defined(_WIN32)
-#include <windows.h>
-#elif defined(__APPLE__)
-#include <mach-o/dyld.h>
-#elif defined(__linux__)
-#include <limits.h>
-#include <unistd.h>
-#endif
 
 class TraySection {
   float height;
@@ -37,13 +26,12 @@ class TraySection {
 
   Rectangle cellParameters(int id);
 
+public:
   TraySection(float x, float y, float width, float height,
               std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool);
 
   void draw(int activeProc);
   void updateWait(int id, bool wait);
-
-  friend class SimView;
 };
 
 class TimeLine {
@@ -69,27 +57,27 @@ class TimeLine {
   Texture missedSprite;
   Color missedColor{244, 176, 176, 125};
 
-  TimeLine(float x, float y, float width, float height,
-           std::shared_ptr<std::list<Event>> events,
-           std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool);
-
-  void advanceState();
-
   std::pair<float, float> getPosWidth(float start, float end);
   float getLaneHeight();
   float getLaneY(int id);
   std::pair<float, float> getImgCoor();
 
+public:
+  TimeLine(float x, float y, float width, float height,
+           std::shared_ptr<std::list<Event>> events,
+           std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool,
+           std::filesystem::path execPath);
+
+  void advanceState();
+
   void drawTimeLine();
   void drawLogs();
   void draw();
-
-  friend class SimView;
 };
 
-class SimView {
-  float x;
-  float y;
+class View {
+  float x = 0;
+  float y = 0;
   float width;
   float height;
   int procNum = 0;
@@ -98,16 +86,14 @@ class SimView {
   int activeProc;
   std::shared_ptr<std::list<Event>> events;
   std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool;
+  std::filesystem::path execPath;
 
   TraySection tray;
   TimeLine timeline;
-  Scheduler sched;
-  std::jthread schedulingThread;
-  void eventInterface(Event);
 
 public:
-  SimView(float x, float y, float width, float height);
-  ~SimView();
+  void eventInterface(Event);
+  View(float width, float height, std::filesystem::path execPath);
   void draw();
   void advanceState();
   void initTasks(std::vector<std::tuple<long, long, long>> paramVector);
