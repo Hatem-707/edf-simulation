@@ -27,9 +27,10 @@ find_package(raylib REQUIRED)
 add_executable(main)
 target_sources(main PRIVATE
     ${SOURCE_DIR}/main.cpp
-    ${SOURCE_DIR}/simview.cpp
+    ${SOURCE_DIR}/view.cpp
     ${SOURCE_DIR}/scheduler.cpp
     ${SOURCE_DIR}/controls.cpp
+    ${SOURCE_DIR}/app.cpp
 )
 target_link_libraries(main PRIVATE raylib)
 
