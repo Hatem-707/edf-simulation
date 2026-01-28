@@ -48,10 +48,10 @@ Controls::Controls(std::function<void(int)> deleteTask,
                 mainRec.width * 3 / 4, mainRec.height * 0.09375f},
                "Task Period", darkButton),
       bAddTask(
-          {mainRec.x + 370 * mainRec.width / 480,
-           mainRec.y + mainRec.height * 675 / 800, mainRec.width * 10 / 48,
-           mainRec.height / 8},
-          darkButton,
+          {mainRec.x + 350 * mainRec.width / 480,
+           mainRec.y + mainRec.height * 665 / 800, mainRec.width * 12.f / 48.f,
+           mainRec.height * 12.f / 80.f},
+          {},
           [this]() {
             try {
               long period = std::stol(this->periodIn.input);
