@@ -10,6 +10,7 @@
 #include <mutex>
 #include <optional>
 #include <raylib.h>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -27,19 +28,19 @@ TraySection::TraySection(
       cellWidth((width - 2 * (externalPad + innerPad)) / 3.f), x(x), y(y),
       mainRec({x, y, width, height}), procPool(procPool) {}
 
-Rectangle TraySection::cellParameters(int id) {
+Rectangle TraySection::cellParameters(int index) {
   int numProcs = procPool->size();
   if (!numProcs) {
     return {};
   }
-  if (id < 0 || id >= numProcs) {
+  if (index < 0 || index >= numProcs) {
     return {};
   }
   this->cellWidth =
       (this->width - (2 * externalPad + (numProcs - 1) * innerPad)) /
       static_cast<float>(numProcs);
   Rectangle cell;
-  cell = {x + externalPad + id * (cellWidth + innerPad), y + externalPad,
+  cell = {x + externalPad + index * (cellWidth + innerPad), y + externalPad,
           cellWidth, height - 2 * externalPad};
 
   return cell;
@@ -49,7 +50,7 @@ void TraySection::updateWait(int id, bool wait) {
   if (!procPool->contains(id)) {
     return;
   }
-  (*procPool)[id].first = wait;
+  procPool->at(id).first = wait;
 }
 
 void TraySection::draw(int activeProc) {
@@ -73,6 +74,9 @@ void TraySection::draw(int activeProc) {
   }
   if (procPool->contains(activeProc)) {
     DrawRectangleRounded(runingRec, 0.25, 0, procPool->at(activeProc).second);
+    DrawText(std::to_string(activeProc).c_str(),
+             runingRec.x + runingRec.width / 4.f, runingRec.y, runingRec.height,
+             WHITE);
   } else {
     DrawRectangleRounded(runingRec, 0.25, 0, {30, 34, 42, 255});
   }

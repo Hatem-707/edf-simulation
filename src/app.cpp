@@ -3,6 +3,7 @@
 #include "process.hpp"
 #include "scheduler.hpp"
 #include "view.hpp"
+#include <algorithm>
 #include <tuple>
 #include <vector>
 
@@ -37,6 +38,13 @@ std::filesystem::path get_executable_path() {
   return "";
 #endif
 }
+namespace {
+std::array<Color, 5> procColors = {{{77, 121, 105, 255},
+                                    {122, 107, 99, 255},
+                                    {167, 92, 92, 255},
+                                    {176, 119, 84, 255},
+                                    {184, 145, 75, 255}}};
+}
 
 App::App(float width, float height)
     : execPath(get_executable_path()), view(width, height, execPath),
@@ -65,6 +73,9 @@ void App::removeTasks(std::vector<int> tasksId) {
   std::jthread t(
       [this](std::vector<int> tasksId) { this->sched.removeTasks(tasksId); },
       tasksId);
+  std::erase_if(controls.tasks, [tasksId](TaskCard t) {
+    return std::find(tasksId.begin(), tasksId.end(), t.id) != tasksId.end();
+  });
 }
 
 void App::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
@@ -75,6 +86,12 @@ void App::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
         this->sched.initTasks(paramVector);
       },
       paramVector);
+  for (const auto &[period, duration, _] : paramVector) {
+    controls.tasks.emplace_back(
+        nextTaskId, period, duration, procColors[nextTaskId % 5],
+        [this](int id) { removeTasks({id}); }, controls.deleteIcon);
+    nextTaskId++;
+  }
 }
 
 void App::editAlgo(SchedulingAlgo newAlgo) { sched.assignAlgo(newAlgo); }

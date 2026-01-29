@@ -15,6 +15,7 @@ class App {
   Scheduler sched;
   Controls controls;
   std::jthread schedT;
+  int nextTaskId = 0;
 
 public:
   App(float width, float height);
