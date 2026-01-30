@@ -80,7 +80,7 @@ void App::removeTasks(std::vector<int> tasksId) {
   std::erase_if(controls.cards, [tasksId](TaskCard t) {
     return std::find(tasksId.begin(), tasksId.end(), t.id) != tasksId.end();
   });
-  void setInView();
+  controls.setInView();
 }
 
 void App::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
