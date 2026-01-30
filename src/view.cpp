@@ -292,6 +292,8 @@ void View::eventInterface(Event e) {
 
 void View::draw() {
   ClearBackground({54, 61, 75, 255});
+  DrawText("Waiting Tasks", 95, 43, 30, WHITE);
+  DrawText("Active Task", 590, 23, 30, WHITE);
   {
     std::lock_guard lk(APMTX);
     tray.draw(activeProc);
@@ -303,12 +305,6 @@ void View::advanceState() {
   {
     std::lock_guard lk(eventMTX);
     timeline.advanceState();
-    if (procPool->size() == 6) {
-      for (const auto &[key, value] : *procPool) {
-        std::cout << "key: " << key << "color is:" << value.second.r << " "
-                  << value.second.g << " " << value.second.b << std::endl;
-      }
-    }
   }
 }
 

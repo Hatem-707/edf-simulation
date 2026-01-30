@@ -19,16 +19,16 @@ int main() {
   SetTargetFPS(60);
   int frame{0};
   while (!WindowShouldClose()) {
-    if (frame == 300) {
-      app.removeTasks({0, 3});
-    } else if (frame == 500) {
-      app.initTasks({
-          {6000, 1500, 50},
-          {6000, 1000, 50},
-      });
-    }
-    app.advanceView();
+    // if (frame == 300) {
+    //   app.removeTasks({0, 3});
+    // } else if (frame == 500) {
+    //   app.initTasks({
+    //       {6000, 1500, 50},
+    //       {6000, 1000, 50},
+    //   });
+    // }
     BeginDrawing();
+    app.advanceView();
     app.draw();
     EndDrawing();
     frame++;

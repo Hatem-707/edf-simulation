@@ -1,5 +1,6 @@
 #pragma once
 #include "process.hpp"
+#include <array>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -10,22 +11,18 @@
 
 class Button {
   Rectangle area;
-  std::function<void(void)> onClick;
   std::optional<Texture> icon;
   Color color;
   bool flip = false;
 
 public:
-  Button(Rectangle area, Color, std::function<void(void)> onClick);
-  Button(Rectangle area, Color, std::function<void(void)> onClick,
-         Texture icon);
+  Button(Rectangle area, Color, Texture icon);
   void draw();
   friend class TaskCard;
   friend class Controls;
 };
 
 class InputCard {
-  bool active = false;
   Color color;
   Rectangle area;
   float padRatio = 0.075;
@@ -34,7 +31,7 @@ class InputCard {
 public:
   std::string input;
   InputCard(Rectangle area, std::string defaultText, Color color);
-  void setActive(bool active);
+  bool active = false;
   void draw();
 };
 
@@ -42,23 +39,23 @@ class TaskCard {
   Color color = {44, 48, 59, 255};
   long period;
   long duration;
-  std::function<void(int)> fRemove;
   Button remove;
 
 public:
   int id;
-  TaskCard(int id, long period, long duration, Color color,
-           std::function<void(int)> fRemove, Texture buttonIcon);
+  TaskCard(int id, long period, long duration, Color color, Texture buttonIcon);
   void draw(int index, Rectangle listRec);
 };
 
 class Controls {
+  std::array<bool, 5> cardsInView = {false};
   Color bgColor = {146, 165, 203, 255};
   Rectangle mainRec = {800, 0, 480, 800};
+  Rectangle listArea;
   Rectangle edfRec;
   Rectangle rmsRec;
-  Rectangle listArea;
   int listInd = 0;
+  std::array<Rectangle, 11> clickables;
   SchedulingAlgo currentAlg = SchedulingAlgo::EDF;
   std::filesystem::path execPath;
 
@@ -67,31 +64,39 @@ class Controls {
   InputCard periodIn;
 
   std::function<void(std::pair<long, long>)> addTaskInterface;
-  std::function<void(SchedulingAlgo newAlg)> switchAlgInterface;
-
-  std::function<void(void)> fConfirm = [this]() {
+  std::function<void(SchedulingAlgo newAlg)> assignAlgInterface;
+  void addTask() {
+    long period = 0, duration = 0;
     try {
-      long period = std::stol(this->periodIn.input);
+      if (!this->periodIn.input.empty()) {
+        period = std::stol(this->periodIn.input);
+      }
+      this->periodIn.input.clear();
       try {
-        long duration = std::stol(this->durationIn.input);
-        this->addTaskInterface({period, duration});
+        if (!this->durationIn.input.empty()) {
+          duration = std::stol(this->durationIn.input);
+        }
+        this->durationIn.input.clear();
+        if (period && duration) {
+          this->addTaskInterface({period, duration});
+        }
       } catch (const std::exception &e) {
       }
     } catch (const std::exception &e) {
     }
   };
 
-  std::function<void(void)> fSwitch = [this]() {
+  void switchAlg() {
     if (currentAlg == SchedulingAlgo::EDF) {
-      switchAlgInterface(SchedulingAlgo::RMS);
+      assignAlgInterface(SchedulingAlgo::RMS);
       currentAlg = SchedulingAlgo::RMS;
       bSwitchAlg.flip = true;
     } else {
-      switchAlgInterface(SchedulingAlgo::EDF);
+      assignAlgInterface(SchedulingAlgo::EDF);
       currentAlg = SchedulingAlgo::EDF;
       bSwitchAlg.flip = false;
     }
-  };
+  }
   void scroll(bool up);
   Texture addIcon;
   Texture switchIcon;
@@ -100,11 +105,13 @@ class Controls {
   Button bAddTask;
   Button bSwitchAlg;
   Button bScrollUp;
-  Button bScrolldown;
+  Button bScrollDown;
+  void handleClick(std::pair<float, float> &&pos);
 
 public:
+  void setInView();
   Texture deleteIcon;
-  std::vector<TaskCard> tasks;
+  std::vector<TaskCard> cards;
   Controls(std::function<void(int)> deleteTask,
            std::function<void(std::pair<long, long>)> addTask,
            std::function<void(SchedulingAlgo newAlg)> switchAlg,

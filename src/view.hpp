@@ -21,7 +21,7 @@ class TraySection {
   float cellWidth;
   std::shared_ptr<std::map<int, std::pair<bool, Color>>> procPool;
 
-  Rectangle runingRec{606.5, 63, 150, 150};
+  Rectangle runingRec{606, 63, 150, 150};
   Rectangle mainRec;
 
   Rectangle cellParameters(int id);

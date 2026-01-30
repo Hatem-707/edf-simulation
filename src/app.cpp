@@ -65,7 +65,10 @@ void App::draw() {
   controls.draw();
 }
 
-void App::advanceView() { view.advanceState(); }
+void App::advanceView() {
+  view.advanceState();
+  controls.handleInput();
+}
 
 void App::removeTasks(std::vector<int> tasksId) {
   view.removeTasks(tasksId);
@@ -73,9 +76,11 @@ void App::removeTasks(std::vector<int> tasksId) {
   std::jthread t(
       [this](std::vector<int> tasksId) { this->sched.removeTasks(tasksId); },
       tasksId);
-  std::erase_if(controls.tasks, [tasksId](TaskCard t) {
+
+  std::erase_if(controls.cards, [tasksId](TaskCard t) {
     return std::find(tasksId.begin(), tasksId.end(), t.id) != tasksId.end();
   });
+  void setInView();
 }
 
 void App::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
@@ -87,11 +92,12 @@ void App::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
       },
       paramVector);
   for (const auto &[period, duration, _] : paramVector) {
-    controls.tasks.emplace_back(
-        nextTaskId, period, duration, procColors[nextTaskId % 5],
-        [this](int id) { removeTasks({id}); }, controls.deleteIcon);
+    controls.cards.emplace_back(nextTaskId, period, duration,
+                                procColors[nextTaskId % 5],
+                                controls.deleteIcon);
     nextTaskId++;
   }
+  controls.setInView();
 }
 
 void App::editAlgo(SchedulingAlgo newAlgo) { sched.assignAlgo(newAlgo); }

@@ -1,7 +1,7 @@
 #include "scheduler.hpp"
 #include "process.hpp"
-
 #include <algorithm>
+#include <bits/chrono.h>
 #include <chrono>
 #include <iterator>
 #include <mutex>
@@ -80,9 +80,7 @@ void Scheduler::initTasks(
 std::tuple<std::chrono::steady_clock::time_point, int, Interrupt>
 Scheduler::nextInterrupt() {
   if (tasks.empty()) {
-    // Return a flag indicating nothing to schedule
-    return {timer.now() + std::chrono::milliseconds::max(), -1,
-            Interrupt::taskInit};
+    return {timer.now() + std::chrono::days(1), -1, Interrupt::taskInit};
   }
 
   const auto it = std::ranges::min_element(
@@ -156,6 +154,9 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
 }
 
 void Scheduler::selectRunner() {
+  if (tasks.empty()) {
+    return;
+  }
   auto filtered = tasks | std::views::filter([](const auto &t) {
                     return t.second.status == TaskStatus::waiting ||
                            t.second.status == TaskStatus::running;
