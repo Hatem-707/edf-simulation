@@ -85,8 +85,7 @@ make
 │   ├── main.cpp        # Entry point
 │   ├── process.hpp     # Enums and Event definitions
 │   ├── scheduler.cpp   # Core scheduling logic (Threaded)
-│   ├── simview.cpp     # Visualization logic (Raylib drawing)
-│   └── view.hpp        # Interface for the visualization
+│   └── view.cpp        # Visualization logic (Raylib drawing)
 ├── CMakeLists.txt      # Build configuration
 └── README.md
 ```
