@@ -80,7 +80,7 @@ void Scheduler::initTasks(
 std::tuple<std::chrono::steady_clock::time_point, int, Interrupt>
 Scheduler::nextInterrupt() {
   if (tasks.empty()) {
-    return {timer.now() + std::chrono::days(1), -1, Interrupt::taskInit};
+    return {timer.now() + std::chrono::days(2), -1, Interrupt::taskInit};
   }
 
   const auto it = std::ranges::min_element(
@@ -228,6 +228,7 @@ void Scheduler::loop() {
     {
       latestCP = timer.now();
       if (wakeupTime < latestCP) {
+        handleInterface(); // for the very unlikely event;
         continue;
       }
       std::unique_lock<std::mutex> lk(interfaceMTX);
