@@ -247,6 +247,8 @@ void Controls::handleClick(std::pair<float, float> &&pos) {
     }
     break;
   default:
+    durationIn.active = false;
+    periodIn.active = false;
     break;
   }
 }

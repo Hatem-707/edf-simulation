@@ -7,7 +7,8 @@ A multithreaded visualization of **Earliest Deadline First (EDF)** and **Rate Mo
 
 This project simulates an OS scheduler in real-time, handling task preemption, deadline misses, and context switching events. It features a custom-built GUI and a decoupled architecture where the simulation logic runs on a dedicated thread, synchronized with the visualization layer via a thread-safe event queue.
 
-![Simulation Screenshot](working.png)
+![Simulation Screenshot 1](demo_1.png)
+![Simulation Screenshot 2](demo_2.png)
 
 ##  Key Features
 
