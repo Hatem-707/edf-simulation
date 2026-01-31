@@ -72,7 +72,7 @@ make
 
 1.  **Add Task:** Enter a **Period** and **Duration** (in milliseconds) in the input fields and click `+`.
 2.  **Switch Algorithm:** Click the `Switch Algorithm` button to toggle between EDF and RMS.
-3.  **Delete Task:** Click the `X` icon on any active task card in the list.
+3.  **Delete Task:** Click the `🗑️` icon on any active task card in the list.
 4.  **Observe:**
     *   **Timeline:** Shows the history of execution.
     *   **Logs:** Icons indicate successful completion, preemption, or missed deadlines.
