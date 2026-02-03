@@ -1,7 +1,6 @@
 #include "scheduler.hpp"
 #include "process.hpp"
 #include <algorithm>
-#include <bits/chrono.h>
 #include <chrono>
 #include <iterator>
 #include <mutex>
