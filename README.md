@@ -9,26 +9,26 @@ This a multithreaded scheduling simulation implementing event queues, conditiona
 ![Simulation Screenshot 2](demo_2.png)
 
 ## Features
-1. **Dynamic task editing**
+1. **Dynamic task editing** \
     On the fly task insertion/ deletion.
-2. **Scheduling Algorithm Change**
+2. **Scheduling Algorithm Change** \
     Allow switching between earliest deadline first (EDF) and rate monotonic scheduling RMS
-3. **Efficient sleeping**
+3. **Efficient sleeping** \
     This is achieved through conditional variables and wait_until
-4. **Procducer consumer multithreading**
+4. **Procducer consumer multithreading** \
     the two threads use non-blocking queues to stage and handle changes correctly
 
 ##  Architecture
 
-1. **view.cpp**
+1. **view.cpp** \
     handles the Gnatt chart, the waiting tasks tray, and the current running task.
-2. **controls**
+2. **controls** \
     renders the UI section and handles input events. 
-3. **scheduler.cpp**
+3. **scheduler.cpp** \
     the scheduler 
-4. **app.cpp**
+4. **app.cpp** \
     combine the different components and bind interfaces for communication
-5. **main.cpp**
+5. **main.cpp** \
     the entry point 
 ### Compiling
 
