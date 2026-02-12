@@ -9,7 +9,7 @@ This a multithreaded scheduling simulation implementing event queues, conditiona
 # Demo
 ![Simulation Screenshot 1](demo_1.png)
 ![Simulation Screenshot 2](demo_2.png)
-https://github.com/user-attachments/assets/08dcbb25-769a-4921-875d-3213f09a4e00
+<video src="https://github.com/user-attachments/assets/08dcbb25-769a-4921-875d-3213f09a4e00" controls="controls" style="max-width:100%;"> </video>
 
 
 ## Features
