@@ -115,38 +115,33 @@ void TimeLine::advanceState() {
 
     const auto mapIT = procPool->find(it->id);
     int index = std::distance(procPool->begin(), mapIT);
-
-    if (it->type == EventType::start) {
-      if (elementBuffer[index].has_value()) {
+    // Events responsiple for setting the wait state only
+    if (it->type == EventType::initialize || it->type == EventType::restart) {
+      it = events->erase(it);
+      continue;
+    } else if (it->type == EventType::start) {
+      if (elementBuffer[index]) {
         std::cout << "New run while unterminated one exist for Process: "
                   << it->id << std::endl;
-
+        it = events->erase(it);
+        continue;
       } else {
         elementBuffer[index] = {
             std::make_tuple(it->timeSince, std::nullopt, it->id), it};
       }
       it++;
       continue;
-    } else if (it->type != EventType::initialize) {
-      if (!elementBuffer[index].has_value() && it->type != EventType::missed) {
+    } else {
+      if (!elementBuffer[index] && it->type != EventType::missed) {
         std::cout
             << "Terminating or interrupting an uninitialized run for process: "
             << it->id << std::endl;
-        it++;
+        it = events->erase(it);
         continue;
-      } else {
-        if (!elementBuffer[index].has_value()) {
-          if (it->timeSince >= timeLineDuration) {
-            it = events->erase(it);
-          } else {
-            it++;
-            continue;
-          }
-        }
+      } else if (elementBuffer[index]) {
         auto &[start, end, proc] = elementBuffer[index]->first;
         end = it->timeSince;
         if (start == timeLineDuration && it->timeSince >= timeLineDuration) {
-          // SAFE now because we are using std::list (iterators stay valid)
           events->erase(elementBuffer[index]->second);
           elementBuffer[index].reset();
           it = events->erase(it);
@@ -157,14 +152,14 @@ void TimeLine::advanceState() {
           it++;
           continue;
         }
-      }
-    } else {
-      if (it->timeSince >= timeLineDuration) {
-        it = events->erase(it);
-        continue;
       } else {
-        it++;
-        continue;
+        if (it->timeSince >= timeLineDuration) {
+          it = events->erase(it);
+          continue;
+        } else {
+          it++;
+          continue;
+        }
       }
     }
   }
@@ -259,7 +254,7 @@ View::View(float width, float height, std::filesystem::path pExcutable)
 void View::eventInterface(Event e) {
   {
     std::lock_guard lk(eventMTX);
-    if (e.type != EventType::initialize && e.type != EventType::resart) {
+    if (e.type != EventType::initialize && e.type != EventType::restart) {
       events->emplace_back(e);
     }
   }
@@ -267,7 +262,7 @@ void View::eventInterface(Event e) {
   case EventType::initialize:
     tray.updateWait(e.id, true);
     break;
-  case EventType::resart:
+  case EventType::restart:
     tray.updateWait(e.id, true);
     break;
   case EventType::complete: {

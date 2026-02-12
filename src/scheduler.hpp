@@ -48,7 +48,7 @@ class Scheduler {
   int nextId = 0;
 
   SchedulingAlgo algo = SchedulingAlgo::EDF;
-  std::optional<SchedulingAlgo> algoBuf;
+  std::optional<SchedulingAlgo> algoBuf = std::nullopt;
 
   void addTask(std::tuple<long, long, long, int> &taskParam);
   void deleteTask(int id);

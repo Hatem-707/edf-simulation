@@ -216,6 +216,8 @@ void Controls::handleClick(std::pair<float, float> &&pos) {
       break;
     }
   }
+  durationIn.active = false;
+  periodIn.active = false;
   switch (index) {
   case 0:
     switchAlg();
@@ -247,8 +249,6 @@ void Controls::handleClick(std::pair<float, float> &&pos) {
     }
     break;
   default:
-    durationIn.active = false;
-    periodIn.active = false;
     break;
   }
 }

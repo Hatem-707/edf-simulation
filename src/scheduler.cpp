@@ -121,7 +121,7 @@ void Scheduler::handleInterrupt(std::tuple<int, Interrupt> firedInterrupt) {
       }
     } else {
       if (eventInterface) {
-        eventInterface({EventType::resart, t.id});
+        eventInterface({EventType::restart, t.id});
       }
     }
     t.status = TaskStatus::waiting;
@@ -167,11 +167,11 @@ void Scheduler::selectRunner() {
   }
 
   auto it = std::ranges::min_element(filtered, {}, [this](const auto &t) {
-    return (algo == SchedulingAlgo::EDF)
-               ? ((t.second.deadline > timer.now())
-                      ? t.second.deadline - timer.now()
-                      : std::chrono::milliseconds::max())
-               : t.second.period;
+    return ((algo == SchedulingAlgo::EDF)
+                ? ((t.second.deadline > timer.now())
+                       ? t.second.deadline - timer.now()
+                       : std::chrono::milliseconds::max())
+                : t.second.period);
   });
 
   const auto &[id, task] = *it;
@@ -209,7 +209,9 @@ void Scheduler::selectRunner() {
 void Scheduler::loop() {
   {
     std::unique_lock<std::mutex> lk(interfaceMTX);
-    CV.wait(lk, [this]() { return !this->incoming.empty() || !running; });
+    CV.wait(lk, [this]() {
+      return !this->incoming.empty() || !running || algoBuf;
+    });
   }
   if (!running) {
     return;
@@ -233,7 +235,7 @@ void Scheduler::loop() {
       std::unique_lock<std::mutex> lk(interfaceMTX);
       if (CV.wait_until(lk, wakeupTime, [this]() {
             return !this->incoming.empty() || !running ||
-                   !this->tasksToRemove.empty();
+                   !this->tasksToRemove.empty() || algoBuf;
           })) {
         if (!running)
           break;

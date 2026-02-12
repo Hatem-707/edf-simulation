@@ -6,7 +6,7 @@ enum class EventType {
   preempt,
   missed,
   initialize,
-  resart
+  restart
 };
 
 enum class SchedulingAlgo { EDF = 0, RMS };
