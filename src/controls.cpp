@@ -223,10 +223,10 @@ void Controls::handleClick(std::pair<float, float> &&pos) {
     switchAlg();
     break;
   case 1:
-    scroll(false);
+    scroll(true);
     break;
   case 2:
-    scroll(true);
+    scroll(false);
     break;
   case 3:
     addTask();
