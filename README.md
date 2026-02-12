@@ -36,6 +36,6 @@ This a multithreaded scheduling simulation implementing event queues, conditiona
     the entry point 
 ### Compiling
 
-the project assumes you have Raylib on the system and require C++20. If you don't just uncomment the fetch content lines in the CMakeLists.txt.
+the project assumes you have Raylib, compiled using Raylib 5.5, on the system and require C++20. If you don't have raylib just uncomment the fetch content lines in the CMakeLists.txt.
 
 
