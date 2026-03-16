@@ -73,10 +73,7 @@ void App::advanceView() {
 void App::removeTasks(std::vector<int> tasksId) {
   view.removeTasks(tasksId);
 
-  std::jthread t(
-      [this](std::vector<int> tasksId) { this->sched.removeTasks(tasksId); },
-      tasksId);
-
+  sched.removeTasks(tasksId);
   std::erase_if(controls.cards, [tasksId](TaskCard t) {
     return std::find(tasksId.begin(), tasksId.end(), t.id) != tasksId.end();
   });
@@ -86,11 +83,7 @@ void App::removeTasks(std::vector<int> tasksId) {
 void App::initTasks(std::vector<std::tuple<long, long, long>> paramVector) {
   view.initTasks(paramVector);
 
-  std::jthread t(
-      [this](std::vector<std::tuple<long, long, long>> paramVector) {
-        this->sched.initTasks(paramVector);
-      },
-      paramVector);
+  sched.initTasks(paramVector);
   for (const auto &[period, duration, _] : paramVector) {
     controls.cards.emplace_back(nextTaskId, period, duration,
                                 procColors[nextTaskId % 5],
